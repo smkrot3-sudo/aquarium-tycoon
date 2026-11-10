@@ -105,6 +105,19 @@ max_value = 1.0
 step = 0.05
 value = 0.8
 
+[node name="UpdateRow" type="HBoxContainer" parent="UI/SidebarPanel/SidebarVBox"]
+theme_override_constants/separation = 6
+
+[node name="UpdateButton" type="Button" parent="UI/SidebarPanel/SidebarVBox/UpdateRow"]
+unique_name_in_owner = true
+size_flags_horizontal = 3
+text = "Check for Updates"
+
+[node name="UpdateStatusLabel" type="Label" parent="UI/SidebarPanel/SidebarVBox"]
+unique_name_in_owner = true
+autowrap_mode = 2
+text = ""
+
 [node name="ScrollContainer" type="ScrollContainer" parent="UI/SidebarPanel/SidebarVBox"]
 size_flags_vertical = 3
 horizontal_scroll_mode = 0

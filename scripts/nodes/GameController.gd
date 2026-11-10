@@ -42,6 +42,8 @@ var _current_tank_index: int = 0
 @onready var _lang_toggle_button: Button = %LangToggleButton
 @onready var _volume_label: Label = %VolumeLabel
 @onready var _volume_slider: HSlider = %VolumeSlider
+@onready var _update_button: Button = %UpdateButton
+@onready var _update_status_label: Label = %UpdateStatusLabel
 
 @onready var _buy_heater_button: Button = %BuyHeaterButton
 @onready var _buy_filter_button: Button = %BuyFilterButton
@@ -77,6 +79,11 @@ var _current_tank_index: int = 0
 
 @onready var _content_vbox: VBoxContainer = %ContentVBox
 @onready var _sidebar_panel: PanelContainer = %SidebarPanel
+
+## Drives what pressing the one Update button does next — see UpdateChecker (autoload) for the
+## actual check/download/install logic; this just tracks where in that flow the UI currently is.
+enum UpdateState { IDLE, CHECKING, AVAILABLE, DOWNLOADING, READY_TO_INSTALL }
+var _update_state: UpdateState = UpdateState.IDLE
 
 var _alert_timer: float = 0.0
 var _ui_refresh_accum: float = 0.0
@@ -127,6 +134,12 @@ func _ready() -> void:
 	_lang_toggle_button.pressed.connect(_on_toggle_language)
 	_volume_slider.value = AudioManager.master_volume
 	_volume_slider.value_changed.connect(func(v): AudioManager.master_volume = v)
+
+	_update_button.pressed.connect(_on_update_button_pressed)
+	UpdateChecker.check_completed.connect(_on_update_check_completed)
+	UpdateChecker.download_progress.connect(_on_update_download_progress)
+	UpdateChecker.download_completed.connect(_on_update_download_completed)
+	UpdateChecker.download_failed.connect(_on_update_download_failed)
 	_buy_large_freshwater_tank_button.pressed.connect(_on_buy_tank.bind("large_freshwater_tank"))
 	_buy_marine_reef_tank_button.pressed.connect(_on_buy_tank.bind("marine_reef_tank"))
 
@@ -211,6 +224,7 @@ func _normalize_sidebar_buttons() -> void:
 	_tank_tab2_button.clip_text = true
 	_guide_button.clip_text = true
 	_guide_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_update_button.clip_text = true
 
 
 func _process(delta: float) -> void:
@@ -230,6 +244,8 @@ func _apply_static_labels() -> void:
 	_title_label.text = Localization.t("ui_title")
 	_guide_button.text = Localization.t("nav_guide")
 	_volume_label.text = Localization.t("settings_volume")
+	if _update_state == UpdateState.IDLE:
+		_update_button.text = Localization.t("update_check")
 	_lang_toggle_button.text = Localization.t("lang_toggle_to_en" if Localization.current_language == "he" else "lang_toggle_to_he")
 
 	_equipment_label.text = Localization.t("section_equipment")
@@ -467,6 +483,54 @@ func _on_sell_one() -> void:
 
 func _on_fast_forward() -> void:
 	TimeManager.debug_fast_forward_days(1.0)
+
+
+func _on_update_button_pressed() -> void:
+	match _update_state:
+		UpdateState.IDLE:
+			_update_state = UpdateState.CHECKING
+			_update_button.disabled = true
+			_update_status_label.text = Localization.t("update_checking")
+			UpdateChecker.check_for_update()
+		UpdateState.AVAILABLE:
+			_update_button.disabled = true
+			UpdateChecker.start_download()
+		UpdateState.READY_TO_INSTALL:
+			UpdateChecker.install_downloaded_update()
+
+
+func _on_update_check_completed(update_available: bool, _latest_tag: String, error_code: String) -> void:
+	_update_button.disabled = false
+	if error_code != "":
+		_update_state = UpdateState.IDLE
+		_update_button.text = Localization.t("update_check")
+		_update_status_label.text = Localization.t("update_check_failed")
+		return
+	if not update_available:
+		_update_state = UpdateState.IDLE
+		_update_button.text = Localization.t("update_check")
+		_update_status_label.text = Localization.t("update_up_to_date")
+		return
+	_update_state = UpdateState.AVAILABLE
+	_update_button.text = Localization.t("update_check")
+	_update_status_label.text = Localization.t("update_available", [_latest_tag])
+
+
+func _on_update_download_progress(fraction: float) -> void:
+	_update_status_label.text = Localization.t("update_downloading", [int(fraction * 100)])
+
+
+func _on_update_download_completed(_local_path: String) -> void:
+	_update_state = UpdateState.READY_TO_INSTALL
+	_update_button.disabled = false
+	_update_status_label.text = Localization.t("update_ready_install")
+
+
+func _on_update_download_failed(_error_code: String) -> void:
+	_update_state = UpdateState.IDLE
+	_update_button.disabled = false
+	_update_button.text = Localization.t("update_check")
+	_update_status_label.text = Localization.t("update_download_failed")
 
 
 func _on_water_quality_alert(message_key: String) -> void:

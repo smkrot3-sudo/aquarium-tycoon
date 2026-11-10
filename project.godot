@@ -34,6 +34,7 @@ ShopManager="*res://autoload/ShopManager.gd"
 EventManager="*res://autoload/EventManager.gd"
 GameState="*res://autoload/GameState.gd"
 AudioManager="*res://autoload/AudioManager.gd"
+UpdateChecker="*res://autoload/UpdateChecker.gd"
 
 [rendering]
 

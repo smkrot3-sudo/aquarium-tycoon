@@ -176,6 +176,15 @@ var _strings: Dictionary = {
 	"temperament_2": {"en": "Aggressive", "he": "תוקפני"},
 
 	"settings_volume": {"en": "Volume", "he": "עוצמת קול"},
+
+	"update_check": {"en": "Check for Updates", "he": "בדוק עדכונים"},
+	"update_checking": {"en": "Checking for updates...", "he": "בודק עדכונים..."},
+	"update_up_to_date": {"en": "You're up to date", "he": "אתה מעודכן לגרסה האחרונה"},
+	"update_available": {"en": "New version available (%s) - tap to download", "he": "גרסה חדשה זמינה (%s) - לחץ להורדה"},
+	"update_downloading": {"en": "Downloading update... %d%%", "he": "מוריד עדכון... %d%%"},
+	"update_ready_install": {"en": "Update downloaded - tap to install", "he": "העדכון ירד בהצלחה - לחץ להתקנה"},
+	"update_check_failed": {"en": "Couldn't check for updates", "he": "לא ניתן לבדוק עדכונים"},
+	"update_download_failed": {"en": "Update download failed", "he": "הורדת העדכון נכשלה"},
 }
 
 
