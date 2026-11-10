@@ -1,0 +1,8 @@
+# Godot editor cache - regenerated automatically, not source
+.godot/
+
+# Build output (APK/AAB) - published via GitHub Releases, not tracked in git history
+builds/
+
+# Contains the release keystore path + plaintext signing password - never commit this
+export_presets.cfg

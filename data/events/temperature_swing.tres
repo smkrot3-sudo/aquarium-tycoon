@@ -1,0 +1,16 @@
+[gd_resource type="Resource" script_class="RandomEventData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/resources/RandomEventData.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "temperature_swing"
+display_name = "Temperature Swing"
+notification_text = "A sudden draft or room-temperature swing has pushed the tank's temperature off target."
+trigger_season_tags = Array[int]([])
+base_probability_per_day = 0.015
+neglect_multiplier_max = 2.0
+duration_sim_days = 1.5
+effects = {
+"temp_swing_c": -3.0
+}

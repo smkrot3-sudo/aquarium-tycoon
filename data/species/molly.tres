@@ -1,0 +1,40 @@
+[gd_resource type="Resource" script_class="FishSpeciesData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/resources/FishSpeciesData.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "molly"
+display_name = "Molly"
+description = "A larger, hardier livebearer that wants more swimming room and harder water than a guppy — a natural tank-upgrade fish."
+archetype_id = "livebearer"
+palette_color = Color(0.92, 0.92, 0.95, 1)
+pattern_id = "solid"
+fin_variant_id = "fan"
+temp_min_c = 23.0
+temp_max_c = 27.0
+ph_min = 7.0
+ph_max = 8.5
+gh_min = 15.0
+gh_max = 30.0
+min_tank_liters = 75.0
+diet_type = 1
+bioload_factor = 0.8
+temperament = 0
+compatibility_tags = Array[String](["livebearer"])
+schooling_min_group = 1
+max_size_cm = 10.0
+growth_rate_cm_per_sim_day = 0.07
+maturity_age_sim_days = 90.0
+lifespan_sim_days = 1460.0
+is_livebearer = true
+pair_required = true
+breeding_cooldown_sim_days = 30.0
+fry_per_batch_min = 20
+fry_per_batch_max = 60
+base_price = 8
+sell_price_adult = 7
+sell_price_fry = 1
+rarity_tier = 0
+unlock_tier = 1
+source_note = "DRAFT placeholder ranges. unlock_tier=1 deliberately since its 75L minimum forces a tank upgrade past the MVP starter tank. Verify against Seriously Fish / Aquarium Co-Op before shipping real data."

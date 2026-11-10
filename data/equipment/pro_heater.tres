@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="EquipmentData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/resources/EquipmentData.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "pro_heater"
+display_name = "Pro Adjustable Heater"
+slot = 0
+price = 32
+unlock_tier = 1
+heater_target_temp_c = 25.0
+heater_power = 1.8
+heater_base_failure_chance_per_day = 0.0006

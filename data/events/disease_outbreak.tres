@@ -1,0 +1,16 @@
+[gd_resource type="Resource" script_class="RandomEventData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/resources/RandomEventData.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "disease_outbreak"
+display_name = "Disease Outbreak"
+notification_text = "Stress and poor conditions have let an illness take hold in the tank. Treat it before it spreads further."
+trigger_season_tags = Array[int]([])
+base_probability_per_day = 0.01
+neglect_multiplier_max = 8.0
+duration_sim_days = 0.1
+effects = {
+"force_sick_fraction": 0.4
+}

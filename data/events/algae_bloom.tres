@@ -1,0 +1,16 @@
+[gd_resource type="Resource" script_class="RandomEventData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/resources/RandomEventData.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "algae_bloom"
+display_name = "Algae Bloom"
+notification_text = "Strong light and built-up nutrients have triggered an algae bloom."
+trigger_season_tags = Array[int]([1])
+base_probability_per_day = 0.025
+neglect_multiplier_max = 4.0
+duration_sim_days = 5.0
+effects = {
+"nitrate_spike": 2.0
+}

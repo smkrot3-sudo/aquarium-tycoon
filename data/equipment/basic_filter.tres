@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="EquipmentData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/resources/EquipmentData.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "basic_filter"
+display_name = "Basic Sponge Filter"
+slot = 1
+price = 12
+unlock_tier = 0
+filter_flow_liters_per_hour = 80.0
+filter_bio_capacity = 0.5

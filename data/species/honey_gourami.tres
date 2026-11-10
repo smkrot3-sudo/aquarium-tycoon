@@ -1,0 +1,42 @@
+[gd_resource type="Resource" script_class="FishSpeciesData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/resources/FishSpeciesData.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "honey_gourami"
+display_name = "Honey Gourami"
+description = "A calm labyrinth fish that breathes surface air and builds a bubble nest for its eggs. Does best in quiet, lightly-flowing water."
+archetype_id = "labyrinth"
+palette_color = Color(0.9, 0.7, 0.2, 1)
+pattern_id = "solid"
+fin_variant_id = "fan"
+temp_min_c = 22.0
+temp_max_c = 28.0
+ph_min = 6.0
+ph_max = 7.5
+gh_min = 2.0
+gh_max = 10.0
+min_tank_liters = 40.0
+diet_type = 1
+bioload_factor = 0.5
+temperament = 0
+compatibility_tags = Array[String](["peaceful", "labyrinth", "surface_breather"])
+schooling_min_group = 1
+disease_resistance = 0.55
+max_size_cm = 5.0
+growth_rate_cm_per_sim_day = 0.035
+maturity_age_sim_days = 150.0
+lifespan_sim_days = 1500.0
+is_livebearer = false
+pair_required = true
+breeding_cooldown_sim_days = 35.0
+fry_per_batch_min = 10
+fry_per_batch_max = 25
+egg_incubation_sim_days = 2.0
+base_price = 11
+sell_price_adult = 7
+sell_price_fry = 1
+rarity_tier = 0
+unlock_tier = 1
+source_note = "DRAFT placeholder ranges. Verify against Seriously Fish / Aquarium Co-Op before shipping real data."

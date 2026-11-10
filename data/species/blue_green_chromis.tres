@@ -1,0 +1,44 @@
+[gd_resource type="Resource" script_class="FishSpeciesData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/resources/FishSpeciesData.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "blue_green_chromis"
+display_name = "Blue-Green Chromis"
+description = "A hardy, inexpensive reef schooling fish, bright blue-green and always active mid-water. A classic 'starter school' for a new reef tank."
+archetype_id = "schooler"
+palette_color = Color(0.15, 0.55, 0.75, 1)
+pattern_id = "solid"
+fin_variant_id = "forked"
+temp_min_c = 24.0
+temp_max_c = 27.0
+ph_min = 7.9
+ph_max = 8.4
+gh_min = 5.0
+gh_max = 20.0
+min_tank_liters = 60.0
+is_marine = true
+sg_min = 1.022
+sg_max = 1.026
+diet_type = 1
+bioload_factor = 0.3
+temperament = 0
+compatibility_tags = Array[String](["marine", "schooling"])
+schooling_min_group = 6
+disease_resistance = 0.65
+max_size_cm = 7.0
+growth_rate_cm_per_sim_day = 0.03
+maturity_age_sim_days = 150.0
+lifespan_sim_days = 1200.0
+is_livebearer = false
+pair_required = true
+breeding_cooldown_sim_days = 0.0
+fry_per_batch_min = 0
+fry_per_batch_max = 0
+base_price = 22
+sell_price_adult = 14
+sell_price_fry = 0
+rarity_tier = 1
+unlock_tier = 2
+source_note = "DRAFT placeholder ranges. Breeding intentionally disabled (fry_per_batch 0/0): real chromis are pelagic broadcast spawners essentially never bred in home aquaria, unlike this game's other egg-layers. Sell adults bought from the shop, not bred fry. Verify against Seriously Fish / Aquarium Co-Op before shipping real data."

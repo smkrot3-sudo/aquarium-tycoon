@@ -1,0 +1,42 @@
+[gd_resource type="Resource" script_class="FishSpeciesData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/resources/FishSpeciesData.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "harlequin_rasbora"
+display_name = "Harlequin Rasbora"
+description = "A tight-schooling soft-water fish with a copper body and a dark wedge patch. Scatters eggs under broad leaves rather than giving live birth."
+archetype_id = "schooler"
+palette_color = Color(0.85, 0.5, 0.25, 1)
+pattern_id = "wedge"
+fin_variant_id = "forked"
+temp_min_c = 23.0
+temp_max_c = 27.0
+ph_min = 6.0
+ph_max = 7.5
+gh_min = 2.0
+gh_max = 10.0
+min_tank_liters = 40.0
+diet_type = 1
+bioload_factor = 0.4
+temperament = 0
+compatibility_tags = Array[String](["peaceful", "schooling"])
+schooling_min_group = 6
+disease_resistance = 0.45
+max_size_cm = 4.0
+growth_rate_cm_per_sim_day = 0.04
+maturity_age_sim_days = 120.0
+lifespan_sim_days = 1800.0
+is_livebearer = false
+pair_required = false
+breeding_cooldown_sim_days = 25.0
+fry_per_batch_min = 10
+fry_per_batch_max = 30
+egg_incubation_sim_days = 1.0
+base_price = 7
+sell_price_adult = 4
+sell_price_fry = 1
+rarity_tier = 0
+unlock_tier = 1
+source_note = "DRAFT placeholder ranges. Verify against Seriously Fish / Aquarium Co-Op before shipping real data."

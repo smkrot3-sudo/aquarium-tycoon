@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="EquipmentData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/resources/EquipmentData.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "basic_light"
+display_name = "Basic Aquarium Light"
+slot = 2
+price = 8
+unlock_tier = 0
+light_intensity = 0.8
+light_color = Color(1, 0.98, 0.9, 1)

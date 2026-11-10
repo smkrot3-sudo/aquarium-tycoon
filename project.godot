@@ -1,0 +1,43 @@
+; Engine configuration file.
+; It's best edited using the editor UI and not directly,
+; since the parameters that go here are not all obvious.
+;
+; Format:
+;   [section] ; section goes between []
+;   param=value ; assign values to parameters
+
+config_version=5
+
+[application]
+
+config/name="Aquarium Tycoon"
+run/main_scene="res://scenes/main/Main.tscn"
+config/features=PackedStringArray("4.7")
+config/icon="res://assets/icon/main_192.png"
+
+[display]
+
+window/size/viewport_width=1152
+window/size/viewport_height=648
+window/stretch/mode="canvas_items"
+window/stretch/aspect="expand"
+window/handheld/orientation="sensor_landscape"
+
+[autoload]
+
+Localization="*res://autoload/Localization.gd"
+TimeManager="*res://autoload/TimeManager.gd"
+EconomyManager="*res://autoload/EconomyManager.gd"
+SaveManager="*res://autoload/SaveManager.gd"
+TankRegistry="*res://autoload/TankRegistry.gd"
+ShopManager="*res://autoload/ShopManager.gd"
+EventManager="*res://autoload/EventManager.gd"
+GameState="*res://autoload/GameState.gd"
+AudioManager="*res://autoload/AudioManager.gd"
+
+[rendering]
+
+renderer/rendering_method="mobile"
+renderer/rendering_method.mobile="mobile"
+textures/vram_compression/import_etc2_astc=true
+environment/defaults/default_clear_color=Color(0.1, 0.13, 0.19, 1)

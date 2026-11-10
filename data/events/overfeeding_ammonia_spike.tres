@@ -1,0 +1,16 @@
+[gd_resource type="Resource" script_class="RandomEventData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/resources/RandomEventData.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "overfeeding_ammonia_spike"
+display_name = "Ammonia Spike"
+notification_text = "The water smells off — uneaten food has rotted and ammonia is spiking. Do a water change soon."
+trigger_season_tags = Array[int]([])
+base_probability_per_day = 0.03
+neglect_multiplier_max = 6.0
+duration_sim_days = 3.0
+effects = {
+"ammonia_spike": 1.2
+}

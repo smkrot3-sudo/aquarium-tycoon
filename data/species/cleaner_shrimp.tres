@@ -1,0 +1,44 @@
+[gd_resource type="Resource" script_class="FishSpeciesData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/resources/FishSpeciesData.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "cleaner_shrimp"
+display_name = "Cleaner Shrimp"
+description = "A reef-safe scavenger that picks up leftover food and detritus. A cheap, reliable second income source for a marine tank, same role cherry shrimp play in freshwater."
+archetype_id = "invertebrate"
+palette_color = Color(0.85, 0.35, 0.3, 1)
+pattern_id = "horizontal_stripes"
+fin_variant_id = "default"
+temp_min_c = 23.0
+temp_max_c = 27.0
+ph_min = 7.9
+ph_max = 8.4
+gh_min = 5.0
+gh_max = 20.0
+min_tank_liters = 40.0
+is_marine = true
+sg_min = 1.021
+sg_max = 1.026
+diet_type = 3
+bioload_factor = 0.15
+temperament = 0
+compatibility_tags = Array[String](["marine", "invertebrate", "reef_safe"])
+schooling_min_group = 1
+disease_resistance = 0.55
+max_size_cm = 6.0
+growth_rate_cm_per_sim_day = 0.02
+maturity_age_sim_days = 90.0
+lifespan_sim_days = 730.0
+is_livebearer = true
+pair_required = true
+breeding_cooldown_sim_days = 35.0
+fry_per_batch_min = 5
+fry_per_batch_max = 15
+base_price = 18
+sell_price_adult = 10
+sell_price_fry = 2
+rarity_tier = 1
+unlock_tier = 2
+source_note = "DRAFT placeholder ranges. Real cleaner shrimp are simultaneous hermaphrodites whose larvae need special planktonic rearing to survive — modeled here as a simplified instant-fry livebearer for gameplay consistency with cherry_shrimp, same simplification already applied there. Verify against Seriously Fish / Aquarium Co-Op before shipping real data."

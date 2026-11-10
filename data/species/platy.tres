@@ -1,0 +1,40 @@
+[gd_resource type="Resource" script_class="FishSpeciesData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/resources/FishSpeciesData.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "platy"
+display_name = "Platy"
+description = "A cheerful, chunky livebearer that comes in many colors. A slightly bigger step up from the guppy."
+archetype_id = "livebearer"
+palette_color = Color(0.9, 0.25, 0.35, 1)
+pattern_id = "solid"
+fin_variant_id = "fan"
+temp_min_c = 22.0
+temp_max_c = 28.0
+ph_min = 6.5
+ph_max = 8.0
+gh_min = 10.0
+gh_max = 28.0
+min_tank_liters = 40.0
+diet_type = 1
+bioload_factor = 0.6
+temperament = 0
+compatibility_tags = Array[String](["livebearer"])
+schooling_min_group = 1
+max_size_cm = 7.0
+growth_rate_cm_per_sim_day = 0.06
+maturity_age_sim_days = 60.0
+lifespan_sim_days = 1095.0
+is_livebearer = true
+pair_required = true
+breeding_cooldown_sim_days = 28.0
+fry_per_batch_min = 10
+fry_per_batch_max = 40
+base_price = 6
+sell_price_adult = 5
+sell_price_fry = 1
+rarity_tier = 0
+unlock_tier = 0
+source_note = "DRAFT placeholder ranges. Verify against Seriously Fish / Aquarium Co-Op before shipping real data."
