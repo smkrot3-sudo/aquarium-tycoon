@@ -20,6 +20,7 @@ func _load_events(dir_path: String) -> void:
 	dir.list_dir_begin()
 	var file_name := dir.get_next()
 	while file_name != "":
+		file_name = file_name.trim_suffix(".remap")  ## exported builds list "*.tres.remap"
 		if file_name.ends_with(".tres"):
 			var res: RandomEventData = load(dir_path + file_name)
 			if res != null:
@@ -34,14 +35,23 @@ func _on_sim_day(_day: int) -> void:
 		_roll_events_for_tank(tank)
 
 
+## No random trouble during the first days of a game (the player is still learning the loop)
+## or in a tank with nothing living in it.
+const GRACE_DAYS := 8
+## In-game days now pass in two real minutes, so per-day odds are scaled down to keep the
+## real-time frequency of events reasonable.
+const PROBABILITY_SCALE := 0.4
+
 func _roll_events_for_tank(tank: TankController) -> void:
+	if TimeManager.current_day() < GRACE_DAYS or tank.get_fish().is_empty():
+		return
 	var neglect: float = tank.get_neglect_score()
 	var season: TimeManager.Season = TimeManager.current_season
 	for event in event_catalog:
 		if event.trigger_season_tags.size() > 0 and season not in event.trigger_season_tags:
 			continue
 		var multiplier: float = 1.0 + neglect * (event.neglect_multiplier_max - 1.0)
-		var chance: float = event.base_probability_per_day * multiplier
+		var chance: float = event.base_probability_per_day * multiplier * PROBABILITY_SCALE
 		if randf() < chance:
 			tank.apply_event(event)
 			event_triggered.emit(tank, event)

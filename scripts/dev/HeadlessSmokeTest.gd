@@ -26,14 +26,17 @@ func _ready() -> void:
 	for fish in main.current_tank().get_fish():
 		print("  - %s (fry=%s) hunger=%.1f health=%.1f size=%.2f" % [fish.species.display_name, fish.is_fry, fish.hunger, fish.health, fish.size_cm])
 
-	print("=== Fast-forwarding 45 sim-days (feeding every ~3 days) ===")
-	for day in range(45):
+	print("=== Fast-forwarding 20 sim-days (daily feeding, water change every 4 days) ===")
+	for day in range(20):
 		TimeManager.debug_fast_forward_days(1.0)
-		if day % 3 == 0:
-			main._on_feed()
+		main._on_feed()
+		if day % 4 == 3:
+			main._on_water_change()
+	var fry_count: int = main.current_tank().fry_count()
+	print("Adults: %d | Fry: %d (fry must grow into adults over time)" % [main.current_tank().get_fish().size() - fry_count, fry_count])
 
 	print("Tank state -> temp=%.2f ammonia=%.3f nitrite=%.3f nitrate=%.2f filter_maturity=%.1f" % [main.current_tank().temperature, main.current_tank().ammonia, main.current_tank().nitrite, main.current_tank().nitrate, main.current_tank().filter_maturity])
-	print("Fish count after 45 days (breeding should have produced fry): ", main.current_tank().get_fish().size())
+	print("Fish count after 20 days (breeding should have produced fry): ", main.current_tank().get_fish().size())
 	print("Cash: ", EconomyManager.cash)
 
 	print("=== Water change ===")
@@ -60,12 +63,13 @@ func _ready() -> void:
 	main._on_buy_fish("honey_gourami")
 	print("Fish count after buying Phase 2 species: %d" % main.current_tank().get_fish().size())
 
-	print("=== Fast-forwarding another 60 sim-days (egg-layer breeding + disease) ===")
-	for day in range(60):
+	print("=== Fast-forwarding another 30 sim-days (egg-layer breeding + disease) ===")
+	for day in range(30):
 		TimeManager.debug_fast_forward_days(1.0)
-		if day % 3 == 0:
-			main._on_feed()
-	print("Fish count after 60 more days: %d | Pending egg batches: %d" % [main.current_tank().get_fish().size(), main.current_tank().pending_egg_batches.size()])
+		main._on_feed()
+		if day % 4 == 3:
+			main._on_water_change()
+	print("Fish count after 30 more days: %d | Pending egg batches: %d" % [main.current_tank().get_fish().size(), main.current_tank().pending_egg_batches.size()])
 	print("Oxygen: %.2f ppm | Sick fish: %d" % [main.current_tank().oxygen, main.current_tank().sick_fish_count()])
 
 	print("=== Deterministic disease/medication check ===")
@@ -104,8 +108,9 @@ func _ready() -> void:
 	print("=== Fast-forwarding marine tank 20 sim-days ===")
 	for day in range(20):
 		TimeManager.debug_fast_forward_days(1.0)
-		if day % 3 == 0:
-			main._on_feed()
+		main._on_feed()
+		if day % 4 == 3:
+			main._on_water_change()
 	print("Marine tank after 20 days -> temp=%.2f sg=%.4f ph=%.2f fish=%d sick=%d" % [main.current_tank().temperature, main.current_tank().specific_gravity, main.current_tank().ph, main.current_tank().get_fish().size(), main.current_tank().sick_fish_count()])
 
 	print("=== Switching back to Tank 1 (freshwater) to confirm it kept simulating independently ===")
@@ -113,8 +118,21 @@ func _ready() -> void:
 	print("Tank 1 after same elapsed time -> temp=%.2f ph=%.2f fish=%d" % [main.current_tank().temperature, main.current_tank().ph, main.current_tank().get_fish().size()])
 
 	print("=== Save/load round trip (now with 2 tanks) ===")
+	var tank1: TankController = main._tanks[0]
+	var before := "fish=%d filter=%s heater=%s kit=%s cash=%d" % [tank1.get_fish().size(), tank1.filter != null, tank1.heater != null, tank1.has_test_kit, EconomyManager.cash]
 	SaveManager.save_game()
 	print("Saved. has_save() = ", SaveManager.has_save())
+	tank1.filter = null
+	tank1.heater = null
+	tank1.has_test_kit = false
+	SaveManager.load_game()
+	var after := "fish=%d filter=%s heater=%s kit=%s cash=%d" % [tank1.get_fish().size(), tank1.filter != null, tank1.heater != null, tank1.has_test_kit, EconomyManager.cash]
+	print("Before save: ", before)
+	print("After load:  ", after, "  ->  ", "ROUND TRIP OK" if before == after else "ROUND TRIP MISMATCH")
+
+	print("=== New game reset ===")
+	main.reset_game()
+	print("After reset: cash=%d tank1 fish=%d filter=%s | tank2 locked=%s | has_save=%s" % [EconomyManager.cash, tank1.get_fish().size(), tank1.filter != null, main._tanks[1].locked, SaveManager.has_save()])
 
 	print("=== Smoke test complete, no crashes ===")
 	get_tree().quit()

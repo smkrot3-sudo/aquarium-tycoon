@@ -1,7 +1,31 @@
 extends RefCounted
 class_name Economy
 
-const STARTING_CASH := 45
+const STARTING_CASH := 60
+
+## Species data keeps real-world-ish life-cycle numbers (a guppy matures in ~60 days, breeds
+## every ~3 weeks); these scale them down to something a phone play session can actually see.
+const BREEDING_PACE := 0.16  ## guppy: 21 -> ~3.4 sim days between batches (~7 real minutes)
+const MATURITY_PACE := 0.09  ## guppy: 60 -> ~5.4 sim days from fry to sellable adult (~11 minutes)
+## Fish stop breeding once the tank is this full (fraction of max_safe_bioload) — the player
+## has to sell to make room, which is the whole economic loop, and it stops runaway floods.
+const BREEDING_STOCKING_LIMIT := 0.9
+
+
+static func breeding_cooldown_days(species: FishSpeciesData) -> float:
+	return species.breeding_cooldown_sim_days * BREEDING_PACE
+
+
+static func maturity_days(species: FishSpeciesData) -> float:
+	return maxf(1.0, species.maturity_age_sim_days * MATURITY_PACE)
+
+
+## Lifetime earnings still needed to reach the next unlock tier (0 when already at the top).
+static func earnings_to_next_tier(lifetime_earnings: int) -> int:
+	var tier := unlock_tier_for_earnings(lifetime_earnings)
+	if tier + 1 >= TIER_THRESHOLDS.size():
+		return 0
+	return TIER_THRESHOLDS[tier + 1] - lifetime_earnings
 
 ## Unlock tiers are gated by cumulative lifetime earnings (simplest possible rule for MVP;
 ## see plan Section 4 for the Phase-2+ reputation layer).

@@ -12,5 +12,5 @@ base_probability_per_day = 0.03
 neglect_multiplier_max = 6.0
 duration_sim_days = 3.0
 effects = {
-"ammonia_spike": 1.2
+"ammonia_spike": 0.6
 }

@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://x1nrlrfs1r0b"
-path="res://.godot/imported/air_stone.jpg-b0edd174edafb8d42f01f2d6c80bb860.ctex"
+uid="uid://bjg32pgmmmssc"
+path="res://.godot/imported/freshwater.jpg-0449b6f92b8b708604ca3cbf284ff036.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/equipment/raw/air_stone.jpg"
-dest_files=["res://.godot/imported/air_stone.jpg-b0edd174edafb8d42f01f2d6c80bb860.ctex"]
+source_file="res://assets/backgrounds/freshwater.jpg"
+dest_files=["res://.godot/imported/freshwater.jpg-0449b6f92b8b708604ca3cbf284ff036.ctex"]
 
 [params]
 

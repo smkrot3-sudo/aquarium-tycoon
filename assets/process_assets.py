@@ -91,5 +91,5 @@ def process_category(category: str, max_dim: int) -> None:
 
 if __name__ == "__main__":
     process_category("decor", max_dim=360)
-    process_category("equipment", max_dim=96)
-    process_category("food", max_dim=64)
+    process_category("equipment", max_dim=256)
+    process_category("food", max_dim=200)

@@ -26,6 +26,9 @@ func _load_catalog(dir_path: String, into: Dictionary) -> void:
 	dir.list_dir_begin()
 	var file_name := dir.get_next()
 	while file_name != "":
+		## In an exported build the directory lists "guppy.tres.remap", not "guppy.tres" —
+		## without this trim every catalog loads empty on a real device (and only there).
+		file_name = file_name.trim_suffix(".remap")
 		if file_name.ends_with(".tres"):
 			var res := load(dir_path + file_name)
 			if res != null and "id" in res and res.id != "":

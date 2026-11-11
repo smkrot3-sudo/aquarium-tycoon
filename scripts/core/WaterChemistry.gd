@@ -17,7 +17,7 @@ const OXYGEN_DANGER := 4.0      ## ppm, below this fish get low-oxygen stress
 static func step_filter_maturity(current_maturity: float, bioload_total: float, filter_bio_capacity: float, hours: float) -> float:
 	if bioload_total <= 0.0 or filter_bio_capacity <= 0.0:
 		return current_maturity
-	var growth_per_hour: float = 0.08 * filter_bio_capacity * clampf(bioload_total, 0.1, 3.0)
+	var growth_per_hour: float = 1.2 * filter_bio_capacity * clampf(bioload_total, 0.5, 3.0)
 	return clampf(current_maturity + growth_per_hour * hours, 0.0, 100.0)
 
 
@@ -29,7 +29,9 @@ static func step_filter_maturity(current_maturity: float, bioload_total: float, 
 static func step_ammonia(current_ammonia: float, waste_input: float, bioload_total: float, filter_flow: float, filter_maturity: float, hours: float) -> Dictionary:
 	var produced: float = (waste_input + bioload_total * 0.02) * hours
 	var maturity_factor: float = filter_maturity / 100.0
-	var processed: float = current_ammonia * (filter_flow / 500.0) * maturity_factor * 0.5 * hours
+	## clampf(...,0,1): never process more than what's there in one step (matters for the big
+	## batched `hours` of an offline catch-up).
+	var processed: float = current_ammonia * clampf((filter_flow / 500.0) * maturity_factor * 2.5 * hours, 0.0, 1.0)
 	var next_ammonia: float = maxf(0.0, current_ammonia + produced - processed)
 	var actual_processed: float = current_ammonia + produced - next_ammonia
 	return {"ammonia": next_ammonia, "processed": actual_processed}
@@ -40,8 +42,8 @@ static func step_ammonia(current_ammonia: float, waste_input: float, bioload_tot
 ## ammonia-oxidizing bacteria in a real new tank, which is why nitrite often spikes *after* ammonia).
 static func step_nitrite(current_nitrite: float, ammonia_processed: float, filter_maturity: float, hours: float) -> float:
 	var produced: float = ammonia_processed * 0.8
-	var maturity_factor: float = clampf((filter_maturity - 20.0) / 80.0, 0.0, 1.0)
-	var processed: float = current_nitrite * maturity_factor * 0.3 * hours
+	var maturity_factor: float = clampf((filter_maturity - 10.0) / 60.0, 0.0, 1.0)
+	var processed: float = current_nitrite * clampf(maturity_factor * 0.8 * hours, 0.0, 1.0)
 	return maxf(0.0, current_nitrite + produced - processed)
 
 
@@ -103,7 +105,7 @@ static func step_oxygen(current_oxygen: float, temperature: float, bioload_total
 ## regular top-off/water changes to hold salinity steady) — modeled as a slowly rising
 ## effective target rather than a hard mechanic, consistent with the other fraction-based steps.
 static func step_specific_gravity(current_sg: float, target_sg: float, days_since_water_change: float, hours: float) -> float:
-	var evaporation_drift: float = clampf(days_since_water_change * 0.0004, 0.0, 0.01)
+	var evaporation_drift: float = clampf(days_since_water_change * 0.00012, 0.0, 0.01)
 	var effective_target: float = target_sg + evaporation_drift
 	var fraction: float = clampf(0.02 * hours, 0.0, 1.0)
 	return current_sg + (effective_target - current_sg) * fraction

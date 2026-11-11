@@ -25,6 +25,11 @@ func _notification(what: int) -> void:
 		save_game()
 
 
+func delete_save() -> void:
+	if FileAccess.file_exists(SAVE_PATH):
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(SAVE_PATH))
+
+
 func has_save() -> bool:
 	return FileAccess.file_exists(SAVE_PATH)
 

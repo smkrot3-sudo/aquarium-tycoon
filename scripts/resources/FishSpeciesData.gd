@@ -67,10 +67,21 @@ enum Temperament { PEACEFUL, SEMI_AGGRESSIVE, AGGRESSIVE }
 @export_multiline var source_note: String = ""
 
 
-func is_within_tolerance(temp_c: float, ph: float, gh: float, specific_gravity: float = 1.0) -> bool:
-	if temp_c < temp_min_c or temp_c > temp_max_c:
+## Gameplay tolerance check. Deliberately judges only what the player can influence:
+## temperature (heater, seasons), salinity (water changes) and a pH that has drifted well out of
+## range (the neglect-driven "old tank" crash). General hardness is NOT checked — there is no
+## in-game way to adjust it, and tap-water GH 10 sat outside several species' ideal range
+## (mollies, cherry shrimp), which silently left them permanently stressed. The exact ideal
+## ranges are still shown in the guide as care information.
+const PH_MARGIN := 0.4
+const TEMP_MARGIN := 0.3
+
+
+func is_within_tolerance(temp_c: float, ph: float, _gh: float, specific_gravity: float = 1.0) -> bool:
+	if temp_c < temp_min_c - TEMP_MARGIN or temp_c > temp_max_c + TEMP_MARGIN:
+		return false
+	if ph < ph_min - PH_MARGIN or ph > ph_max + PH_MARGIN:
 		return false
 	if is_marine:
-		return specific_gravity >= sg_min and specific_gravity <= sg_max \
-			and ph >= ph_min and ph <= ph_max
-	return ph >= ph_min and ph <= ph_max and gh >= gh_min and gh <= gh_max
+		return specific_gravity >= sg_min - 0.0005 and specific_gravity <= sg_max + 0.0005
+	return true

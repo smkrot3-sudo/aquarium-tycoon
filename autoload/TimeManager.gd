@@ -4,9 +4,9 @@ extends Node
 
 enum Season { SPRING, SUMMER, AUTUMN, WINTER }
 
-const SIM_MINUTES_PER_REAL_SECOND := 3.0   ## tune after playtesting; ~1 in-game day per ~8 real minutes
+const SIM_MINUTES_PER_REAL_SECOND := 12.0  ## one in-game day per 2 real minutes — phone-session pacing
 const SIM_DAYS_PER_SEASON := 7
-const MAX_OFFLINE_SIM_DAYS := 5.0           ## cap how far offline-progress catch-up can jump
+const MAX_OFFLINE_SIM_DAYS := 3.0           ## cap how far offline-progress catch-up can jump
 
 signal sim_tick(hours_elapsed: float)       ## emitted roughly once per in-game hour
 signal sim_day_elapsed(day: int)
