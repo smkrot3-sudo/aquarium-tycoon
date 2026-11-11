@@ -17,5 +17,5 @@ func _ready() -> void:
 			energy += float(v) * float(v)
 		var rms := sqrt(energy / maxf(1.0, float(count)))
 		print("%s: %d samples (%.1f s) in %d ms | peak %d | rms %.0f | %s" % [which, count, float(count) / audio.LOOP_RATE, ms, peak, rms, "OK" if peak > 4000 and peak < 32000 and rms > 800.0 else "SUSPICIOUS"])
-	print("music loop playing: ", AudioManager._music_player.playing)
+	print("music on by default: ", AudioManager.music_volume > 0.0)
 	get_tree().quit()

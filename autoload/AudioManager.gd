@@ -19,20 +19,25 @@ var master_volume: float = 0.8:
 	set(value):
 		master_volume = clampf(value, 0.0, 1.0)
 		_apply_bus_volume("Master", master_volume)
-var music_volume: float = 0.6:
+## Music and ambience are OFF until the player turns the music volume up. They are generated
+## and played only then, and nothing else about audio touches the engine's bus layout: no
+## runtime buses, no effects — the simplest audio path, since the game started closing
+## unexpectedly on some phones right after music was introduced.
+var music_volume: float = 0.0:
 	set(value):
 		music_volume = clampf(value, 0.0, 1.0)
-		_apply_bus_volume("Music", music_volume)
+		_apply_music()
 var sfx_volume: float = 0.9:
 	set(value):
 		sfx_volume = clampf(value, 0.0, 1.0)
-		_apply_bus_volume("SFX", sfx_volume)
+		_apply_sfx_volume()
 
 var _streams: Dictionary = {}
 var _players: Array[AudioStreamPlayer] = []
 var _music_player: AudioStreamPlayer
 var _ambience_player: AudioStreamPlayer
-var _music_filter: AudioEffectLowPassFilter
+var _loops_started: bool = false
+var _loops_rendering: bool = false
 var _cancel: bool = false
 var _filter_timer: float = 0.0
 var _slice_start_usec: int = 0
@@ -41,7 +46,6 @@ const SLICE_USEC := 5000
 
 
 func _ready() -> void:
-	_setup_buses()
 	_streams["click"] = _make_tone([880.0], 0.05, 0.3)
 	_streams["coin"] = _make_tone([1046.5, 1568.0], 0.1, 0.35)       ## buying something — a short rising "cha-ching"
 	_streams["cash"] = _make_tone([1318.5, 1046.5], 0.1, 0.3)        ## selling a fish — a short falling chime
@@ -53,40 +57,23 @@ func _ready() -> void:
 
 	for i in range(PLAYER_POOL_SIZE):
 		var p := AudioStreamPlayer.new()
-		p.bus = "SFX"
 		add_child(p)
 		_players.append(p)
 
 	_music_player = AudioStreamPlayer.new()
-	_music_player.bus = "Music"
 	_music_player.volume_db = -3.0
 	add_child(_music_player)
 	_ambience_player = AudioStreamPlayer.new()
-	_ambience_player.bus = "Music"
 	_ambience_player.volume_db = -11.0
 	add_child(_ambience_player)
 
-	master_volume = master_volume  ## re-trigger the setters to apply the initial bus volumes
-	music_volume = music_volume
+	master_volume = master_volume  ## re-trigger the setters to apply the initial volumes
 	sfx_volume = sfx_volume
-
-	_render_loops.call_deferred()
+	music_volume = music_volume
 
 
 func _exit_tree() -> void:
 	_cancel = true
-
-
-func _setup_buses() -> void:
-	for bus_name in ["Music", "SFX"]:
-		if AudioServer.get_bus_index(bus_name) == -1:
-			AudioServer.add_bus()
-			var index := AudioServer.bus_count - 1
-			AudioServer.set_bus_name(index, bus_name)
-			AudioServer.set_bus_send(index, "Master")
-	_music_filter = AudioEffectLowPassFilter.new()
-	_music_filter.cutoff_hz = 9000.0
-	AudioServer.add_bus_effect(AudioServer.get_bus_index("Music"), _music_filter)
 
 
 func _apply_bus_volume(bus_name: String, linear: float) -> void:
@@ -94,6 +81,23 @@ func _apply_bus_volume(bus_name: String, linear: float) -> void:
 	if index == -1:
 		return
 	AudioServer.set_bus_volume_db(index, linear_to_db(maxf(linear, 0.0001)))
+
+
+func _apply_sfx_volume() -> void:
+	for p in _players:
+		p.volume_db = linear_to_db(maxf(sfx_volume, 0.0001))
+
+
+## Starts (first time the volume goes above zero) or silences the music and ambience.
+func _apply_music() -> void:
+	if _music_player == null:
+		return
+	var audible: bool = music_volume > 0.001
+	_music_player.stream_paused = not audible
+	_ambience_player.stream_paused = not audible
+	if audible and not _loops_started and not _loops_rendering:
+		_loops_rendering = true
+		_render_loops.call_deferred()
 
 
 func play(sfx_name: String) -> void:
@@ -108,16 +112,17 @@ func play(sfx_name: String) -> void:
 	_players[0].play()
 
 
-## Slowly muffles and lowers the music as the in-game evening comes on.
+## The music dips a little in the in-game evening.
 func _process(delta: float) -> void:
 	_filter_timer += delta
-	if _filter_timer < 0.5 or _music_filter == null:
+	if _filter_timer < 1.0 or not _loops_started:
 		return
 	_filter_timer = 0.0
 	var hour: float = TimeManager.current_hour_of_day()
 	var daylight: float = clampf(sin((hour - 6.0) / 12.0 * PI) * 1.4 + 0.2, 0.0, 1.0)
-	_music_filter.cutoff_hz = lerpf(1600.0, 9000.0, daylight)
-	_music_player.volume_db = lerpf(-8.0, -3.0, daylight)
+	var level: float = linear_to_db(maxf(music_volume, 0.0001))
+	_music_player.volume_db = level + lerpf(-9.0, -3.0, daylight)
+	_ambience_player.volume_db = level - 11.0
 
 
 # ----------------------------------------------------------------------------------------
@@ -191,6 +196,8 @@ func _slice() -> void:
 
 
 func _start_loops(ambience: PackedByteArray, music: PackedByteArray) -> void:
+	_loops_started = true
+	_loops_rendering = false
 	if ambience.size() > 0:
 		_ambience_player.stream = _wrap_wav(ambience, LOOP_RATE, true)
 		_ambience_player.play()

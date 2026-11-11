@@ -66,7 +66,7 @@ func save_game() -> void:
 			"current_season": TimeManager.current_season,
 		},
 		"tanks": _collect_tank_saves(),
-		"settings": {"volume": AudioManager.master_volume, "music_volume": AudioManager.music_volume, "sfx_volume": AudioManager.sfx_volume, "language": Localization.current_language},
+		"settings": {"volume": AudioManager.master_volume, "music_level": AudioManager.music_volume, "sfx_volume": AudioManager.sfx_volume, "language": Localization.current_language},
 	}
 	var text := JSON.stringify(data)
 	var file := FileAccess.open(TEMP_PATH, FileAccess.WRITE)
@@ -140,7 +140,8 @@ func load_game() -> bool:
 	Progress.loading = false
 	var settings: Dictionary = data.get("settings", {})
 	AudioManager.master_volume = settings.get("volume", AudioManager.master_volume)
-	AudioManager.music_volume = settings.get("music_volume", AudioManager.music_volume)
+	## "music_level" is a deliberate choice; the old "music_volume" key held a default the player never picked.
+	AudioManager.music_volume = settings.get("music_level", 0.0)
 	AudioManager.sfx_volume = settings.get("sfx_volume", AudioManager.sfx_volume)
 	Localization.set_language(settings.get("language", Localization.current_language))
 

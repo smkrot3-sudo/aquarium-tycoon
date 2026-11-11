@@ -62,14 +62,19 @@ func _ready() -> void:
 		_append_line("[%s] === the previous run ended abnormally; its last actions were: ===" % Time.get_datetime_string_from_system())
 		_append_line(_read(CRUMB_PATH))
 	_write_marker()
-	_sink = ErrorSink.new()
-	_sink.log_path = LOG_PATH
-	OS.add_logger(_sink)
+	## The engine-error hook (OS.add_logger) is left off in shipped builds: it calls script code
+	## from inside the engine's own error path, an unneeded risk while hunting a crash. The
+	## breadcrumbs and the abnormal-exit marker above do not depend on it.
+	if OS.is_debug_build():
+		_sink = ErrorSink.new()
+		_sink.log_path = LOG_PATH
+		OS.add_logger(_sink)
 
 
 func _exit_tree() -> void:
 	if _sink != null:
 		OS.remove_logger(_sink)
+		_sink = null
 	_clear_marker()
 
 
