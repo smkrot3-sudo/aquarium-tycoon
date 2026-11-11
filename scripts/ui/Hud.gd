@@ -22,6 +22,11 @@ var _tip_kind: String = ""
 var _feed_button: Button
 var _water_button: Button
 var _fish_button: Button
+var _speed_button: Button
+var _business_button: Button
+var _tool_buttons: Array[Button] = []
+var _tool_hint_holder: Control
+var _tool_hint_label: Label
 var _refresh_accum: float = 0.0
 
 
@@ -31,8 +36,10 @@ func _ready() -> void:
 	var insets := UiKit.safe_insets(get_viewport())
 	_build_top_bar(insets)
 	_build_tip()
+	_build_tools(insets)
 	_build_bottom_bar(insets)
 	game.state_changed.connect(refresh)
+	TimeManager.speed_changed.connect(_refresh_speed)
 	refresh()
 
 
@@ -60,6 +67,10 @@ func _build_top_bar(insets: Vector2) -> void:
 	day_chip.get_meta("row").add_child(_day_label)
 	row.add_child(day_chip)
 
+	_speed_button = UiKit.action_button("x1", null, "glass", false, Vector2(74.0, 60.0), UiKit.FONT_BODY)
+	_speed_button.pressed.connect(TimeManager.cycle_speed)
+	row.add_child(_speed_button)
+
 	var water_chip := UiKit.chip(60.0)
 	_water_dot = UiKit.icon("dot", 22.0, UiKit.COL_GOOD)
 	water_chip.get_meta("row").add_child(_water_dot)
@@ -74,6 +85,10 @@ func _build_top_bar(insets: Vector2) -> void:
 	row.add_child(fish_chip)
 
 	row.add_child(UiKit.spacer())
+
+	_business_button = UiKit.action_button("0", UiKit.icon("clipboard", 30.0), "glass", false, Vector2(0.0, 60.0), UiKit.FONT_BODY)
+	_business_button.pressed.connect(func(): game.open_business())
+	row.add_child(_business_button)
 
 	_tank_button = UiKit.action_button(Localization.t("hud_tank_n", [1]), UiKit.icon("tank", 30.0), "glass", false, Vector2(0.0, 60.0), UiKit.FONT_BODY)
 	_tank_button.pressed.connect(game.cycle_tank)
@@ -91,9 +106,51 @@ func _build_tip() -> void:
 	tip_holder.offset_bottom = TankController.HUD_TOP_PX + 52.0
 	tip_holder.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(tip_holder)
+	var tip_row := UiKit.hbox(8)
+	tip_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	tip_holder.add_child(tip_row)
 	_tip_button = UiKit.button("", "glass", 52.0, UiKit.FONT_BODY)
 	_tip_button.pressed.connect(_on_tip_pressed)
-	tip_holder.add_child(_tip_button)
+	tip_row.add_child(_tip_button)
+	var why_button := UiKit.action_button("", UiKit.icon("question", 28.0), "glass", false, Vector2(56.0, 52.0))
+	why_button.pressed.connect(game.open_advisor)
+	tip_row.add_child(why_button)
+
+
+## Left edge: which tool the finger is (hand / food / scraper / vacuum), plus a one-line hint
+## of what the current tool does.
+func _build_tools(insets: Vector2) -> void:
+	var holder := VBoxContainer.new()
+	holder.layout_direction = Control.LAYOUT_DIRECTION_LTR
+	holder.add_theme_constant_override("separation", 8)
+	holder.set_anchors_and_offsets_preset(Control.PRESET_TOP_LEFT)
+	holder.offset_left = insets.x + 6.0
+	holder.offset_top = TankController.HUD_TOP_PX + 74.0
+	holder.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(holder)
+	var defs := [
+		[TankController.Tool.HAND, UiKit.icon("hand", 34.0)],
+		[TankController.Tool.FOOD, UiKit.texture_icon("res://assets/food/food_flakes.png", Vector2(46.0, 30.0))],
+		[TankController.Tool.SCRAPER, UiKit.icon("scraper", 34.0)],
+		[TankController.Tool.VACUUM, UiKit.icon("vacuum", 34.0)],
+	]
+	for def in defs:
+		var b := UiKit.action_button("", def[1], "glass", false, Vector2(68.0, 62.0))
+		b.pressed.connect(game.set_tool.bind(def[0]))
+		holder.add_child(b)
+		_tool_buttons.append(b)
+
+	var hint_holder := CenterContainer.new()
+	hint_holder.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_WIDE)
+	hint_holder.offset_top = -(TankController.HUD_BOTTOM_PX + 64.0)
+	hint_holder.offset_bottom = -(TankController.HUD_BOTTOM_PX + 12.0)
+	hint_holder.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(hint_holder)
+	var chip := UiKit.chip(48.0)
+	_tool_hint_label = UiKit.label("", UiKit.FONT_SMALL, UiKit.COL_TEXT, true)
+	chip.get_meta("row").add_child(_tool_hint_label)
+	hint_holder.add_child(chip)
+	_tool_hint_holder = hint_holder
 
 
 func _build_bottom_bar(insets: Vector2) -> void:
@@ -147,10 +204,30 @@ func _on_tip_pressed() -> void:
 		_tip_action.call()
 
 
+func _refresh_speed() -> void:
+	if _speed_button == null:
+		return
+	if TimeManager.player_paused:
+		UiKit.set_action_text(_speed_button, "||")
+		UiKit.set_button_kind(_speed_button, "warn")
+	else:
+		UiKit.set_action_text(_speed_button, "x%d" % int(TimeManager.SPEEDS[TimeManager.speed_index]))
+		UiKit.set_button_kind(_speed_button, "glass" if TimeManager.speed_index == 0 else "primary")
+
+
 func refresh() -> void:
 	if game == null or _cash_label == null:
 		return
 	var tank := game.current_tank()
+	_refresh_speed()
+	var ready_orders: int = Market.orders_ready_count()
+	UiKit.set_action_text(_business_button, str(Market.orders.size()))
+	UiKit.set_button_kind(_business_button, "gold" if ready_orders > 0 else "glass")
+	for i in range(_tool_buttons.size()):
+		UiKit.set_button_kind(_tool_buttons[i], "primary" if game.tool == i else "glass")
+	_tool_hint_holder.visible = game.tool != TankController.Tool.HAND
+	if game.tool != TankController.Tool.HAND:
+		_tool_hint_label.text = Localization.t(["", "tool_hint_food", "tool_hint_scraper", "tool_hint_vacuum"][game.tool])
 	_cash_label.text = "$%d" % EconomyManager.cash
 	_day_label.text = Localization.t("hud_day", [TimeManager.current_day() + 1, Localization.t("season_%d" % TimeManager.current_season)])
 	_fish_label.text = str(tank.get_fish().size())

@@ -214,6 +214,9 @@ func _add_fish_card(species: FishSpeciesData) -> void:
 			else:
 				females += 1
 	var status := Localization.t("shop_owned_sexed", [males, females]) if males + females > 0 else ""
+	if Market.is_rare(species) and Market.in_stock(species) and not GameState.is_sandbox():
+		var stock := Localization.t("shop_rare_stock", [Market.stock_days_left(species)])
+		status = stock if status == "" else status + " · " + stock
 	var shell := _build_card_shell(
 		"res://assets/fish/%s.png" % species.id, Vector2(120.0, 84.0),
 		Localization.t("sp_%s" % species.id), facts, Localization.t("desc_sp_%s" % species.id),

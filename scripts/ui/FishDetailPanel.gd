@@ -13,6 +13,7 @@ var _sex_badge: Label
 var _species_label: Label
 var _stat_rows: VBoxContainer
 var _sell_button: Button
+var _auction_button: Button
 var _poll_accum: float = 0.0
 
 
@@ -40,9 +41,16 @@ func _build() -> void:
 	_stat_rows = UiKit.vbox(10)
 	right.add_child(_stat_rows)
 
+	var actions := UiKit.hbox(10)
+	body.add_child(actions)
 	_sell_button = UiKit.action_button(Localization.t("fish_detail_sell"), UiKit.icon("coin", 28.0), "warn", false, Vector2(0.0, 68.0), UiKit.FONT_BUTTON)
+	_sell_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_sell_button.pressed.connect(_on_sell_pressed)
-	body.add_child(_sell_button)
+	actions.add_child(_sell_button)
+	_auction_button = UiKit.action_button(Localization.t("fish_detail_auction"), UiKit.icon("clipboard", 28.0), "secondary", false, Vector2(0.0, 68.0), UiKit.FONT_BUTTON)
+	_auction_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_auction_button.pressed.connect(_on_auction_pressed)
+	actions.add_child(_auction_button)
 
 
 ## Called by TankController (via GameController.open_fish_detail) right before `open()`.
@@ -82,6 +90,8 @@ func refresh() -> void:
 		_add_stat(Localization.t("fish_detail_condition"), Localization.t("fish_detail_sick"), UiKit.COL_BAD)
 
 	UiKit.set_action_text(_sell_button, Localization.t("fish_detail_sell_for", [Economy.fry_sale_value(species, _fish.is_fry)]))
+	_auction_button.visible = Market.can_auction(_fish)
+	UiKit.set_action_text(_auction_button, Localization.t("fish_detail_auction_for", [Market.expected_auction_value(_fish)]))
 
 
 func _add_stat(title: String, value: String, color: Color = UiKit.COL_TEXT) -> void:
@@ -107,6 +117,18 @@ func _on_sell_pressed() -> void:
 		close()
 		return
 	game.sell_specific_fish(_fish)
+	close()
+
+
+func _on_auction_pressed() -> void:
+	if _fish == null or not is_instance_valid(_fish):
+		close()
+		return
+	var fish_name := _fish.fish_name
+	if Market.list_for_auction(_fish):
+		game.toast(Localization.t("toast_auction_listed", [fish_name]), "info")
+		AudioManager.play("coin")
+		game.state_changed.emit()
 	close()
 
 

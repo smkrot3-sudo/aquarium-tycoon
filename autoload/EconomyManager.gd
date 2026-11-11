@@ -1,5 +1,6 @@
 extends Node
-## Player cash, lifetime earnings (drives unlock tiers), and transaction log.
+## Player cash, lifetime earnings (drives unlock tiers), and transaction log. In Sandbox mode
+## money is unlimited: nothing is ever deducted and every unlock tier is open.
 
 signal cash_changed(new_balance: int)
 signal unlock_tier_changed(new_tier: int)
@@ -11,12 +12,15 @@ var unlock_tier: int = 0
 
 
 func can_afford(amount: int) -> bool:
-	return cash >= amount
+	return GameState.is_sandbox() or cash >= amount
 
 
 func spend(amount: int, reason: String) -> bool:
 	if not can_afford(amount):
 		return false
+	if GameState.is_sandbox():
+		transaction.emit(-amount, reason)
+		return true
 	cash -= amount
 	transaction.emit(-amount, reason)
 	cash_changed.emit(cash)
@@ -31,8 +35,18 @@ func earn(amount: int, reason: String) -> void:
 	_recompute_unlock_tier()
 
 
+## Call after the game mode changes (new game) or a save is loaded.
+func apply_mode() -> void:
+	if GameState.is_sandbox():
+		cash = GameState.SANDBOX_CASH
+		cash_changed.emit(cash)
+	_recompute_unlock_tier()
+
+
 func _recompute_unlock_tier() -> void:
 	var new_tier := Economy.unlock_tier_for_earnings(lifetime_earnings)
+	if GameState.is_sandbox():
+		new_tier = Economy.TIER_THRESHOLDS.size() - 1
 	if new_tier != unlock_tier:
 		unlock_tier = new_tier
 		unlock_tier_changed.emit(unlock_tier)

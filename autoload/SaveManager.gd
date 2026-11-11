@@ -39,12 +39,16 @@ func save_game() -> void:
 		"schema_version": SCHEMA_VERSION,
 		"saved_at_unix": Time.get_unix_time_from_system(),
 		"economy": EconomyManager.to_save_dict(),
+		"game_state": GameState.to_save_dict(),
+		"progress": Progress.to_save_dict(),
+		"market": Market.to_save_dict(),
+		"history": History.to_save_dict(),
 		"time": {
 			"sim_minutes_total": TimeManager.sim_minutes_total,
 			"current_season": TimeManager.current_season,
 		},
 		"tanks": _collect_tank_saves(),
-		"settings": {"volume": AudioManager.master_volume, "language": Localization.current_language},
+		"settings": {"volume": AudioManager.master_volume, "music_volume": AudioManager.music_volume, "sfx_volume": AudioManager.sfx_volume, "language": Localization.current_language},
 	}
 	var file := FileAccess.open(SAVE_PATH, FileAccess.WRITE)
 	if file == null:
@@ -68,14 +72,25 @@ func load_game() -> bool:
 
 	var data: Dictionary = _migrate(parsed)
 
+	GameState.from_save_dict(data.get("game_state", {}))
 	EconomyManager.from_save_dict(data.get("economy", {}))
+	EconomyManager.apply_mode()
+	Progress.from_save_dict(data.get("progress", {}))
+	Market.from_save_dict(data.get("market", {}))
+	History.from_save_dict(data.get("history", {}))
+	TimeManager.reset_speed()
 	var time_data: Dictionary = data.get("time", {})
 	TimeManager.sim_minutes_total = time_data.get("sim_minutes_total", 0.0)
 	TimeManager.current_season = time_data.get("current_season", 0) as TimeManager.Season
 
+	## The collection facts are re-recorded from the saved fish below; nothing is paid for them.
+	Progress.loading = true
 	_apply_tank_saves(data.get("tanks", {}))
+	Progress.loading = false
 	var settings: Dictionary = data.get("settings", {})
 	AudioManager.master_volume = settings.get("volume", AudioManager.master_volume)
+	AudioManager.music_volume = settings.get("music_volume", AudioManager.music_volume)
+	AudioManager.sfx_volume = settings.get("sfx_volume", AudioManager.sfx_volume)
 	Localization.set_language(settings.get("language", Localization.current_language))
 
 	var saved_at: float = data.get("saved_at_unix", Time.get_unix_time_from_system())

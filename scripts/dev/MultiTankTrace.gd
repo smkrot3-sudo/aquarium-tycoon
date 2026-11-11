@@ -1,17 +1,31 @@
 extends Node
-## Dev-only: verifies the four-tank-slot system (buying fills the first free slot, in order,
-## and the fourth purchase is correctly rejected once all slots are full). Not shipped.
+## Dev-only: verifies the eight-tank-slot system (buying fills the first free slot, in order, and a
+## ninth purchase is rejected once all slots are full). Not shipped.
+
+var _failures: int = 0
+
+
+func _check(what: String, ok: bool) -> void:
+	if not ok:
+		_failures += 1
+	print("[%s] %s" % ["PASS" if ok else "FAIL", what])
+
+
 func _ready() -> void:
 	var main: GameController = load("res://scenes/main/Main.tscn").instantiate()
 	add_child(main)
-	EconomyManager.earn(2000, "test funds")
-	print("owned tanks at start: %d" % main.owned_tank_count())
-	print("buy #2 (huge_freshwater_tank): %s -> owned=%d index=%d" % [main.buy_tank("huge_freshwater_tank"), main.owned_tank_count(), main.current_tank_index()])
-	print("buy #3 (marine_reef_tank): %s -> owned=%d index=%d" % [main.buy_tank("marine_reef_tank"), main.owned_tank_count(), main.current_tank_index()])
-	print("buy #4 (large_marine_tank): %s -> owned=%d index=%d" % [main.buy_tank("large_marine_tank"), main.owned_tank_count(), main.current_tank_index()])
-	print("buy #5 (large_freshwater_tank), should fail, no slots left: %s -> owned=%d" % [main.buy_tank("large_freshwater_tank"), main.owned_tank_count()])
-	print("find_tank_of_type(saltwater=true) -> %d (expect 2, first salt tank bought)" % main.find_tank_of_type(true))
-	print("find_tank_of_type(saltwater=false) -> %d (expect 0, current tank)" % main.find_tank_of_type(false))
+	await get_tree().process_frame
+	main.begin_new_game(GameState.Mode.SANDBOX, GameState.Difficulty.NORMAL)
+	_check("One tank to start", main.owned_tank_count() == 1)
+	var presets := ["huge_freshwater_tank", "marine_reef_tank", "large_marine_tank", "large_freshwater_tank", "marine_reef_tank", "large_freshwater_tank", "huge_freshwater_tank"]
+	for i in range(presets.size()):
+		_check("Buying tank #%d (%s) works" % [i + 2, presets[i]], main.buy_tank(presets[i]) and main.owned_tank_count() == i + 2 and main.current_tank_index() == i + 1)
+	_check("All eight slots are in use", main.owned_tank_count() == 8)
+	_check("A ninth tank is refused", not main.buy_tank("large_freshwater_tank") and main.owned_tank_count() == 8)
+	_check("The first saltwater tank is slot 2", main.find_tank_of_type(true) == 2 or main.current_tank().tank_type == TankController.TankType.SALTWATER)
+	var start_index: int = main.current_tank_index()
 	main.cycle_tank()
-	print("cycle_tank once -> index=%d" % main.current_tank_index())
+	_check("Cycling moves to the next tank", main.current_tank_index() == (start_index + 1) % 8)
+	_check("Every owned tank is registered for simulation", TankRegistry.tanks.size() == 8)
+	print("=== Multi-tank trace finished: %s ===" % ("ALL PASSED" if _failures == 0 else "%d FAILED" % _failures))
 	get_tree().quit()

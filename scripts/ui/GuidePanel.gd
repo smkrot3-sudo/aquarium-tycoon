@@ -9,7 +9,7 @@ class_name GuidePanel
 enum Tab { HOW_TO_PLAY, FRESH, SALT, EQUIPMENT, FOOD }
 
 const FOOD_ICON := {"basic_flakes": "food_flakes", "shrimp_pellets": "food_flakes"}
-const HOW_TO_STEPS := 8
+const HOW_TO_STEPS := 11
 const ALBUM_COLUMNS := 4
 
 var _tab: int = Tab.HOW_TO_PLAY

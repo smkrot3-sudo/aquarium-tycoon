@@ -15,9 +15,13 @@ func _ready() -> void:
 	add_child(_main)
 	await _frames(20)
 	var tank := _main.current_tank()
+	## Mission / collection rewards would move the cash these checks count; switch them off.
+	Progress.loading = true
 
 	await _tap_text("שחק")
-	_check("Play hides the home screen", not _main.home.visible)
+	_check("Play on a new game opens the setup screen", _main.new_game.visible)
+	await _tap_text("התחל")
+	_check("Start hides the home screen", not _main.home.visible and not _main.new_game.visible)
 	_check("Welcome panel opened on a new game", _main.welcome.visible)
 
 	await _tap_text("יאללה, לחנות")
@@ -109,6 +113,7 @@ func _ready() -> void:
 	await _tap_text("חנות")
 	_check("Bottom-bar Shop opens the shop", _main.shop.visible)
 	await _tap_icon(_main.shop, "close")
+	_check("Shop closes again", not _main.shop.visible)
 
 	## Force "feed" to be the top coach-line tip (it's outranked by a sick fish or dirty water,
 	## either of which a long enough test run can randomly roll along the way).
@@ -122,6 +127,53 @@ func _ready() -> void:
 	await _frames(30)
 	await _tap_node(_main.hud._tip_button)
 	_check("Tapping the coach line performs its action (feed)", tank.get_fish()[0].hunger > 40.0)
+
+	## --- new in 1.6: speed button, business panel, tools
+	await _tap_text("x1")
+	_check("The speed button switches to 2x", TimeManager.speed_index == 1)
+	await _tap_text("x2")
+	await _tap_text("x4")
+	_check("...then pauses", TimeManager.player_paused)
+	await _tap_text("||")
+	_check("...and resumes at 1x", not TimeManager.player_paused and TimeManager.speed_index == 0)
+
+	await _tap_icon(_main.hud, "clipboard")
+	_check("The business button opens the business panel", _main.business.visible)
+	if not _main.business.visible:
+		await _tap_text("הזמנות")
+	_check("The Orders tab opens", _main.business._tab == BusinessPanel.Tab.ORDERS)
+	await _tap_text("אוסף")
+	_check("The Collection tab opens", _main.business._tab == BusinessPanel.Tab.COLLECTION)
+	await _tap_icon(_main.business, "close")
+	_check("Closing the business panel returns to the tank", not _main.business.visible)
+
+	await _tap_icon(_main.hud, "scraper")
+	_check("Tapping the scraper selects it", _main.tool == TankController.Tool.SCRAPER and tank.tool == TankController.Tool.SCRAPER)
+	tank._algae.set_level(60.0)
+	var algae_before: float = tank.algae_level()
+	var blob_point := Vector2.ZERO
+	for blob in tank._algae._blobs:
+		if float(blob["cover"]) > 0.3:
+			blob_point = tank._algae.rect.position + Vector2(blob["pos"].x * tank._algae.rect.size.x, blob["pos"].y * tank._algae.rect.size.y)
+			break
+	if blob_point != Vector2.ZERO:
+		var drag := InputEventMouseButton.new()
+		drag.button_index = MOUSE_BUTTON_LEFT
+		drag.position = blob_point
+		drag.global_position = blob_point
+		drag.pressed = true
+		get_viewport().push_input(drag, true)
+		await _frames(4)
+		drag.pressed = false
+		get_viewport().push_input(drag, true)
+		await _frames(4)
+	_check("Swiping with the scraper wipes algae off", tank.algae_level() < algae_before)
+	await _tap_icon(_main.hud, "hand")
+	_check("The hand tool puts it away", _main.tool == TankController.Tool.HAND)
+
+	await _tap_icon(_main.hud, "question")
+	_check("The ? next to the coach line opens the advisor", _main.advisor.visible)
+	await _tap_icon(_main.advisor, "close")
 
 	await _tap_icon(_main.hud, "gear")
 	_check("Top-bar gear opens settings", _main.settings.visible)
@@ -137,6 +189,16 @@ func _ready() -> void:
 
 	print("=== UI click test finished: %s ===" % ("ALL PASSED" if _failures == 0 else "%d FAILED" % _failures))
 	get_tree().quit()
+
+
+func _visible_panels() -> Array:
+	var names: Array = []
+	for panel in _main._all_panels():
+		if panel != null and panel.visible:
+			names.append(panel.get_class() + ":" + str(panel.get_script().get_global_name()))
+	if _main.home.visible:
+		names.append("home")
+	return names
 
 
 func _check(what: String, ok: bool) -> void:
@@ -284,6 +346,7 @@ func _tap_text(text: String) -> void:
 		_failures += 1
 		print("[FAIL] no visible button captioned '%s'" % text)
 		return
+	await _scroll_into_view(button)
 	await _tap_node(button)
 
 

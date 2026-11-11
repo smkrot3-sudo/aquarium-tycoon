@@ -4,8 +4,8 @@ class_name SettingsPanel
 ## and starting over. Update state itself lives in GameController so it survives the UI being
 ## rebuilt on a language switch.
 
-var _volume_bar: ProgressBar
-var _volume_value: Label
+## AudioManager property name -> {"bar": ProgressBar, "value": Label}
+var _volume_widgets: Dictionary = {}
 var _update_button: Button
 var _update_status: Label
 var _reset_row: HBoxContainer
@@ -28,19 +28,10 @@ func _build() -> void:
 		lang_button.pressed.connect(Localization.set_language.bind(lang))
 		language_row.add_child(lang_button)
 
-	# --- volume
-	var volume_row := _section(list, Localization.t("settings_volume"))
-	var quieter := UiKit.action_button("", UiKit.icon("minus", 30.0), "secondary", false, Vector2(84.0, 64.0))
-	quieter.pressed.connect(_nudge_volume.bind(-0.1))
-	volume_row.add_child(quieter)
-	_volume_bar = UiKit.progress(AudioManager.master_volume, UiKit.COL_ACCENT, Vector2(260.0, 22.0))
-	volume_row.add_child(_volume_bar)
-	var louder := UiKit.action_button("", UiKit.icon("plus", 30.0), "secondary", false, Vector2(84.0, 64.0))
-	louder.pressed.connect(_nudge_volume.bind(0.1))
-	volume_row.add_child(louder)
-	_volume_value = UiKit.label("", UiKit.FONT_BODY, UiKit.COL_TEXT, true)
-	_volume_value.custom_minimum_size = Vector2(70.0, 0.0)
-	volume_row.add_child(_volume_value)
+	# --- volume (master, music and effects)
+	_add_volume_row(list, "settings_volume", "master_volume")
+	_add_volume_row(list, "settings_music", "music_volume")
+	_add_volume_row(list, "settings_sfx", "sfx_volume")
 
 	# --- updates
 	var update_row := _section(list, Localization.t("settings_updates", [UpdateChecker.APP_VERSION_NAME]))
@@ -98,8 +89,24 @@ func _ask_reset(asking: bool) -> void:
 	_reset_row.get_parent().get_parent().visible = not asking
 
 
-func _nudge_volume(delta: float) -> void:
-	AudioManager.master_volume = snappedf(AudioManager.master_volume + delta, 0.1)
+func _add_volume_row(list: VBoxContainer, title_key: String, property: String) -> void:
+	var row := _section(list, Localization.t(title_key))
+	var quieter := UiKit.action_button("", UiKit.icon("minus", 30.0), "secondary", false, Vector2(84.0, 64.0))
+	quieter.pressed.connect(_nudge_volume.bind(property, -0.1))
+	row.add_child(quieter)
+	var bar := UiKit.progress(float(AudioManager.get(property)), UiKit.COL_ACCENT, Vector2(260.0, 22.0))
+	row.add_child(bar)
+	var louder := UiKit.action_button("", UiKit.icon("plus", 30.0), "secondary", false, Vector2(84.0, 64.0))
+	louder.pressed.connect(_nudge_volume.bind(property, 0.1))
+	row.add_child(louder)
+	var value := UiKit.label("", UiKit.FONT_BODY, UiKit.COL_TEXT, true)
+	value.custom_minimum_size = Vector2(70.0, 0.0)
+	row.add_child(value)
+	_volume_widgets[property] = {"bar": bar, "value": value}
+
+
+func _nudge_volume(property: String, delta: float) -> void:
+	AudioManager.set(property, snappedf(float(AudioManager.get(property)) + delta, 0.1))
 	AudioManager.play("click")
 	refresh()
 
@@ -113,7 +120,9 @@ func _refresh_update() -> void:
 
 
 func refresh() -> void:
-	_volume_bar.value = AudioManager.master_volume
-	_volume_value.text = "%d%%" % int(round(AudioManager.master_volume * 100.0))
+	for property in _volume_widgets.keys():
+		var level: float = float(AudioManager.get(property))
+		_volume_widgets[property]["bar"].value = level
+		_volume_widgets[property]["value"].text = "%d%%" % int(round(level * 100.0))
 	_ask_reset(false)
 	_refresh_update()

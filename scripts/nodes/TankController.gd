@@ -13,6 +13,8 @@ const FISH_SCENE := preload("res://scenes/fish/Fish.tscn")
 const WATER_SHADER := preload("res://shaders/water_shimmer.gdshader")
 
 enum TankType { FRESHWATER, SALTWATER }
+## What a finger does on the water: the hand opens fish cards and startles, the others act.
+enum Tool { HAND, FOOD, SCRAPER, VACUUM }
 
 ## Marine tanks drift toward a higher baseline pH (real reef water runs ~8.1-8.4, alkaline-
 ## buffered) and a salty specific-gravity target instead of freshwater's near-neutral pH.
@@ -86,6 +88,16 @@ var _bubbles: BubbleEffect2D
 var _food_layer: Node2D
 var _food_bits: Array = []  ## [{node: Polygon2D, speed: float, phase: float, life: float}]
 
+## Algae on the glass and mulm on the sand (see DirtOverlay2D); the player cleans them with tools.
+var _algae: DirtOverlay2D
+var _mulm: DirtOverlay2D
+var tool: int = Tool.HAND:
+	set(value):
+		tool = value
+		_end_tool_drag()
+var _tool_dragging: bool = false
+var _last_pinch_msec: int = 0
+
 ## Recomputed by _rebuild_view(): the on-screen area the tank art fills.
 var _view_rect: Rect2 = Rect2(0.0, 0.0, 1152.0, 548.0)
 var _sand_top_y: float = 450.0
@@ -104,6 +116,8 @@ signal water_quality_alert(message_key: String)
 signal fish_born(species: FishSpeciesData, count: int)
 ## reason: "old_age" or "neglect" (FishController.death_reason) — lets the toast tell them apart.
 signal fish_died(species: FishSpeciesData, fish_name: String, reason: String)
+## A cleaning stroke removed some algae (tool == SCRAPER) or mulm (tool == VACUUM).
+signal tool_cleaned(tool_kind: int, blobs: int)
 
 
 func _ready() -> void:
@@ -132,6 +146,32 @@ func _rebuild_view() -> void:
 		_food_layer.name = "Food"
 		_food_layer.z_index = 5
 		add_child(_food_layer)
+	_ensure_overlays()
+
+
+func _ensure_overlays() -> void:
+	if _algae == null:
+		_algae = DirtOverlay2D.new()
+		_algae.name = "Algae"
+		_algae.z_index = 5
+		add_child(_algae)
+		_algae.setup(DirtOverlay2D.Kind.ALGAE, hash(String(name)) + 1)
+		_algae.cursor_radius = 64.0
+		_mulm = DirtOverlay2D.new()
+		_mulm.name = "Mulm"
+		add_child(_mulm)
+		_mulm.setup(DirtOverlay2D.Kind.MULM, hash(String(name)) + 2)
+		_mulm.cursor_radius = 56.0
+	_algae.set_rect(Rect2(_view_rect.position.x, HUD_TOP_PX + 20.0, _view_rect.size.x, maxf(60.0, _sand_top_y - HUD_TOP_PX - 10.0)))
+	_mulm.set_rect(Rect2(_view_rect.position.x + _view_rect.size.x * 0.08, _sand_top_y + 8.0, _view_rect.size.x * 0.84, maxf(30.0, _view_rect.end.y - _sand_top_y - 18.0)))
+
+
+func algae_level() -> float:
+	return _algae.level() if _algae != null else 0.0
+
+
+func mulm_level() -> float:
+	return _mulm.level() if _mulm != null else 0.0
 
 
 ## Open water where mid-water fish swim: clear of the top HUD, the side decor and the sand.
@@ -191,14 +231,38 @@ func _unhandled_input(event: InputEvent) -> void:
 	if not visible:
 		return
 	var point: Vector2 = Vector2.ZERO
-	var is_tap := false
-	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
+	var phase := ""  ## "down", "up" or "move"
+	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
 		point = event.position
-		is_tap = true
-	elif event is InputEventScreenTouch and event.pressed:
+		phase = "down" if event.pressed else "up"
+	elif event is InputEventScreenTouch:
 		point = event.position
-		is_tap = true
-	if not is_tap or not _view_rect.has_point(point):
+		phase = "down" if event.pressed else "up"
+	elif event is InputEventMouseMotion and _tool_dragging:
+		point = event.position
+		phase = "move" if (event.button_mask & MOUSE_BUTTON_MASK_LEFT) != 0 else "up"
+	elif event is InputEventScreenDrag and _tool_dragging:
+		point = event.position
+		phase = "move"
+	if phase == "":
+		return
+	if phase == "up":
+		_end_tool_drag()
+		return
+	if phase == "down" and not _view_rect.has_point(point):
+		return
+
+	match tool:
+		Tool.FOOD:
+			if phase == "down":
+				_pinch_at(point)
+			return
+		Tool.SCRAPER, Tool.VACUUM:
+			if phase == "down":
+				_tool_dragging = true
+			_tool_stroke(point)
+			return
+	if phase != "down":
 		return
 
 	## A tap that lands ON a fish (within its own drawn size) opens its identity card instead of
@@ -218,6 +282,58 @@ func _unhandled_input(event: InputEvent) -> void:
 	for fish in get_fish():
 		if fish.position.distance_to(point) < 220.0:
 			fish.startle(point)
+
+
+func _pinch_at(point: Vector2) -> void:
+	## On a phone a touch arrives as both a touch and an emulated mouse event: one pinch, not two.
+	var now := Time.get_ticks_msec()
+	if now - _last_pinch_msec < 140:
+		return
+	_last_pinch_msec = now
+	if game != null:
+		game.pinch_feed(self, point)
+	else:
+		pinch(ShopManager.get_food("basic_flakes"), point)
+
+
+func _tool_stroke(point: Vector2) -> void:
+	var scraper: bool = tool == Tool.SCRAPER
+	var overlay: DirtOverlay2D = _algae if scraper else _mulm
+	if overlay == null:
+		return
+	overlay.cursor = point
+	var cleaned := overlay.clean_at(point, overlay.cursor_radius)
+	if cleaned > 0:
+		tool_cleaned.emit(tool, cleaned)
+		if not scraper and _bubbles != null:
+			_bubbles.spawn_single(point)
+
+
+func _end_tool_drag() -> void:
+	_tool_dragging = false
+	if _algae != null:
+		_algae.cursor = Vector2.INF
+	if _mulm != null:
+		_mulm.cursor = Vector2.INF
+
+
+## One pinch of flakes dropped at `point`: the fish within reach of it eat some, the rest of
+## the shoal drifts over to look. Returns how many fish ate.
+func pinch(food: FoodItemData, point: Vector2) -> int:
+	_spawn_food_burst(point, 9, false)
+	var fed := 0
+	for fish in get_fish():
+		var dist: float = fish.position.distance_to(point)
+		if dist < 300.0:
+			fish.hunger = minf(100.0, fish.hunger + food.hunger_restored * 0.7)
+			fish.attract_to(point + Vector2(randf_range(-50.0, 50.0), randf_range(-30.0, 40.0)))
+			fed += 1
+	ammonia += food.waste_factor * 0.02
+	if _mulm != null:
+		_mulm.grow(0.5)
+	if fed > 0:
+		days_since_feeding = 0.0
+	return fed
 
 
 func _process(delta: float) -> void:
@@ -353,14 +469,17 @@ func _add_equipment_sprite(equipment_id: String, pos: Vector2, target_height: fl
 	return sprite
 
 
-## Cosmetic: a pinch of flakes drifting down from the surface; fish rush up to it.
-func _spawn_food_burst() -> void:
+## Cosmetic: a pinch of flakes drifting down; fish rush up to it. With no `at` it falls from the
+## surface and the whole tank comes to eat (the bottom-bar Feed button).
+func _spawn_food_burst(at: Vector2 = Vector2.INF, count: int = 18, attract_all: bool = true) -> void:
 	if _food_layer == null:
 		return
 	var swim := get_swim_rect()
 	var origin := Vector2(randf_range(swim.position.x + swim.size.x * 0.3, swim.position.x + swim.size.x * 0.7), HUD_TOP_PX + 64.0)
+	if at != Vector2.INF:
+		origin = at
 	var colors := [Color(0.95, 0.55, 0.2), Color(0.85, 0.3, 0.2), Color(0.95, 0.8, 0.35), Color(0.55, 0.75, 0.3)]
-	for i in range(18):
+	for i in range(count):
 		var bit := Polygon2D.new()
 		var half := randf_range(2.5, 5.0)
 		bit.polygon = PackedVector2Array([Vector2(-half, -half * 0.6), Vector2(half, -half * 0.6), Vector2(half, half * 0.6), Vector2(-half, half * 0.6)])
@@ -368,6 +487,8 @@ func _spawn_food_burst() -> void:
 		bit.position = origin + Vector2(randf_range(-110.0, 110.0), randf_range(-8.0, 20.0))
 		_food_layer.add_child(bit)
 		_food_bits.append({"node": bit, "speed": randf_range(22.0, 46.0), "phase": randf() * TAU, "life": randf_range(3.0, 5.5)})
+	if not attract_all:
+		return
 	for fish in get_fish():
 		fish.attract_to(origin + Vector2(randf_range(-150.0, 150.0), randf_range(40.0, 150.0)))
 
@@ -415,6 +536,10 @@ func reset_to_new(as_locked: bool, liters: float, type: TankType, ambient_base_c
 	pending_egg_batches.clear()
 	_school_targets.clear()
 	_home_points.clear()
+	if _algae != null:
+		_algae.set_level(0.0)
+		_mulm.set_level(0.0)
+	tool = Tool.HAND
 	if as_locked and not locked:
 		TankRegistry.unregister_tank(self)
 	elif not as_locked and locked:
@@ -472,6 +597,10 @@ func simulate_hours(hours: float) -> void:
 
 	if ammonia > WaterChemistry.AMMONIA_DANGER:
 		water_quality_alert.emit("alert_ammonia_danger")
+	if algae_level() >= 90.0 and not is_catching_up:
+		for fish in get_fish():
+			fish.health -= 0.4 * hours / 24.0
+		water_quality_alert.emit("alert_algae_heavy")
 
 
 func _step_chemistry(hours: float) -> void:
@@ -493,6 +622,7 @@ func _step_chemistry(hours: float) -> void:
 	## Nitrate is the end product of the cycle: nothing in the tank removes it, so it simply
 	## builds up with the stocking level until the next water change.
 	nitrate += bioload * 0.04 * hours
+	_grow_dirt(bioload, hours)
 
 	## Soft/neglected freshwater tanks drift toward a lower effective pH ("old tank syndrome");
 	## marine mixes are carbonate-buffered and don't realistically crash the same way.
@@ -502,6 +632,21 @@ func _step_chemistry(hours: float) -> void:
 	ph = WaterChemistry.step_drift_toward(ph, ph_baseline, 0.01, hours)
 	gh = WaterChemistry.step_drift_toward(gh, 10.0, 0.01, hours)
 	specific_gravity = WaterChemistry.step_specific_gravity(specific_gravity, SG_TARGET[tank_type], days_since_water_change, hours)
+
+
+## Algae grows with light and nutrients; mulm piles up in proportion to the fish. Gunk left on
+## the sand slowly feeds the water (the reason to run the gravel vacuum), and an algae-smothered
+## glass slowly wears the fish down.
+func _grow_dirt(bioload: float, hours: float) -> void:
+	if _algae == null or _mulm == null:
+		return
+	var light_rate: float = 0.14 if light_equipment != null else 0.03
+	_algae.grow(light_rate * (1.0 + clampf(nitrate / 40.0, 0.0, 2.0)) * hours)
+	_mulm.grow(bioload * 0.045 * hours)
+	var mulm_now := _mulm.level()
+	if mulm_now > 40.0:
+		ammonia += (mulm_now - 40.0) * 0.00015 * hours
+	nitrate += mulm_now * 0.0008 * hours
 
 
 func on_day_elapsed() -> void:
@@ -606,6 +751,8 @@ func _apply_active_event_effects(hours: float) -> void:
 			ammonia += float(effects["ammonia_spike"]) * (hours / 24.0)
 		if effects.has("nitrate_spike"):
 			nitrate += float(effects["nitrate_spike"]) * (hours / 24.0)
+		if effects.has("algae_boost") and _algae != null:
+			_algae.grow(float(effects["algae_boost"]) * (hours / 24.0))
 		if effects.has("health_penalty_per_day"):
 			for fish in get_fish():
 				fish.health -= float(effects["health_penalty_per_day"]) * (hours / 24.0)
@@ -640,6 +787,7 @@ func add_fish(species: FishSpeciesData, is_fry: bool = false, forced_sex: int = 
 	add_child(fish)
 	fish.setup(species, is_fry, forced_sex)
 	fish.died.connect(_on_fish_died)
+	Progress.note_fish_added(species, is_fry, fish.hue_shift_value())
 	return fish
 
 
@@ -650,6 +798,7 @@ func _on_fish_died(fish: FishController) -> void:
 func sell_fish(fish: FishController) -> int:
 	var value := Economy.fry_sale_value(fish.species, fish.is_fry)
 	EconomyManager.earn(value, "Sold %s" % fish.species.display_name)
+	Progress.bump("fish_sold")
 	fish.queue_free()
 	return value
 
@@ -674,7 +823,7 @@ func to_save_dict() -> Dictionary:
 		"days_since_feeding": days_since_feeding,
 		"heater_failed": heater_failed,
 		"medication_remaining_days": medication_remaining_days,
-		"pending_egg_batches": pending_egg_batches,
+		"pending_egg_batches": pending_egg_batches, "algae": algae_level(), "mulm": mulm_level(),
 		"tank_liters": tank_liters, "tank_type": tank_type, "locked": locked,
 		"ambient_temp_base_c": ambient_temp_base_c,
 		"equipment": {
@@ -718,6 +867,9 @@ func from_save_dict(d: Dictionary) -> void:
 	medication_remaining_days = d.get("medication_remaining_days", 0.0)
 	pending_egg_batches = d.get("pending_egg_batches", [])
 	_rebuild_view()
+	if _algae != null:
+		_algae.set_level(float(d.get("algae", 0.0)))
+		_mulm.set_level(float(d.get("mulm", 0.0)))
 	for fish in get_fish():
 		fish.free()
 	for fish_data in d.get("fish", []):

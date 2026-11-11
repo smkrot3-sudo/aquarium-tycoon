@@ -46,6 +46,10 @@ func _build() -> void:
 	_treat_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_treat_button.pressed.connect(game.treat_disease)
 	actions.add_child(_treat_button)
+	var stats_button := UiKit.action_button(Localization.t("tank_graphs"), UiKit.icon("chart", 30.0), "secondary", false, Vector2(0.0, 68.0), UiKit.FONT_BUTTON)
+	stats_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	stats_button.pressed.connect(game.open_stats)
+	actions.add_child(stats_button)
 	var shop_button := UiKit.action_button(Localization.t("tank_buy_equipment"), UiKit.icon("bag", 30.0), "gold", false, Vector2(0.0, 68.0), UiKit.FONT_BUTTON)
 	shop_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	shop_button.pressed.connect(func(): game.open_shop(ShopPanel.Tab.EQUIPMENT))

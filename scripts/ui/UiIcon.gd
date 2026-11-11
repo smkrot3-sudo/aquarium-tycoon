@@ -103,5 +103,43 @@ func _draw() -> void:
 			draw_arc(circ_c, s * 0.24, 0.0, TAU, 24, color, w, true)
 			draw_line(circ_c + Vector2(0, s * 0.24), c + Vector2(0, s * 0.42), color, w, true)
 			draw_line(c + Vector2(-s * 0.16, s * 0.33), c + Vector2(s * 0.16, s * 0.33), color, w, true)
+		"hand":
+			## An arrow pointer: the plain "tap things" tool.
+			draw_colored_polygon(PackedVector2Array([
+				c + Vector2(-s * 0.22, -s * 0.4), c + Vector2(-s * 0.22, s * 0.3), c + Vector2(-s * 0.05, s * 0.14),
+				c + Vector2(s * 0.08, s * 0.42), c + Vector2(s * 0.2, s * 0.36), c + Vector2(s * 0.08, s * 0.1), c + Vector2(s * 0.3, s * 0.08),
+			]), color)
+		"scraper":
+			## A squeegee: handle on top of a flat blade.
+			draw_line(c + Vector2(s * 0.06, s * 0.02), c + Vector2(s * 0.24, -s * 0.38), color, w * 1.5, true)
+			draw_rect(Rect2(c + Vector2(-s * 0.4, s * 0.02), Vector2(s * 0.8, s * 0.18)), color)
+			draw_rect(Rect2(c + Vector2(-s * 0.4, s * 0.22), Vector2(s * 0.8, s * 0.08)), Color(1, 1, 1, 0.5))
+		"vacuum":
+			## A siphon: bent hose into a wide nozzle.
+			draw_polyline(PackedVector2Array([c + Vector2(-s * 0.3, s * 0.3), c + Vector2(-s * 0.3, -s * 0.06), c + Vector2(-s * 0.02, -s * 0.34), c + Vector2(s * 0.34, -s * 0.34)]), color, w * 1.5, true)
+			draw_colored_polygon(PackedVector2Array([c + Vector2(-s * 0.46, s * 0.26), c + Vector2(-s * 0.14, s * 0.26), c + Vector2(-s * 0.1, s * 0.42), c + Vector2(-s * 0.5, s * 0.42)]), color)
+			draw_circle(c + Vector2(s * 0.12, s * 0.3), s * 0.05, Color(color, 0.7))
+			draw_circle(c + Vector2(s * 0.26, s * 0.18), s * 0.04, Color(color, 0.5))
+		"clipboard":
+			draw_rect(Rect2(c + Vector2(-s * 0.3, -s * 0.34), Vector2(s * 0.6, s * 0.76)), color, false, w)
+			draw_rect(Rect2(c + Vector2(-s * 0.13, -s * 0.44), Vector2(s * 0.26, s * 0.16)), color)
+			for i in range(3):
+				var y := -s * 0.14 + i * s * 0.16
+				draw_line(c + Vector2(-s * 0.16, y), c + Vector2(s * 0.16, y), color, w * 0.6, true)
+		"chart":
+			draw_polyline(PackedVector2Array([c + Vector2(-s * 0.4, -s * 0.38), c + Vector2(-s * 0.4, s * 0.36), c + Vector2(s * 0.42, s * 0.36)]), color, w * 0.8, true)
+			draw_polyline(PackedVector2Array([c + Vector2(-s * 0.3, s * 0.2), c + Vector2(-s * 0.08, -s * 0.04), c + Vector2(s * 0.1, s * 0.1), c + Vector2(s * 0.36, -s * 0.28)]), color, w * 1.1, true)
+		"star":
+			var pts := PackedVector2Array()
+			for i in range(10):
+				var a: float = -PI * 0.5 + float(i) / 10.0 * TAU
+				var rad: float = s * (0.44 if i % 2 == 0 else 0.2)
+				pts.append(c + Vector2(cos(a), sin(a)) * rad)
+			draw_colored_polygon(pts, color)
+		"question":
+			draw_arc(c + Vector2(0, -s * 0.12), s * 0.2, PI * 1.1, TAU + PI * 0.45, 18, color, w * 1.2, true)
+			draw_line(c + Vector2(s * 0.14, s * 0.06), c + Vector2(0, s * 0.18), color, w * 1.2, true)
+			draw_line(c + Vector2(0, s * 0.18), c + Vector2(0, s * 0.24), color, w * 1.2, true)
+			draw_circle(c + Vector2(0, s * 0.38), s * 0.06, color)
 		_:
 			draw_circle(c, s * 0.3, color)

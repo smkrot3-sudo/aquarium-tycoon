@@ -35,6 +35,9 @@ EventManager="*res://autoload/EventManager.gd"
 GameState="*res://autoload/GameState.gd"
 AudioManager="*res://autoload/AudioManager.gd"
 UpdateChecker="*res://autoload/UpdateChecker.gd"
+Progress="*res://autoload/Progress.gd"
+Market="*res://autoload/Market.gd"
+History="*res://autoload/History.gd"
 
 [rendering]
 

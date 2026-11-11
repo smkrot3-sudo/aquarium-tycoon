@@ -12,5 +12,6 @@ base_probability_per_day = 0.025
 neglect_multiplier_max = 4.0
 duration_sim_days = 5.0
 effects = {
-"nitrate_spike": 2.0
+"nitrate_spike": 2.0,
+"algae_boost": 14.0
 }

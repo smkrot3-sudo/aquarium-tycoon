@@ -202,6 +202,15 @@ func _apply_scale() -> void:
 		_shadow.scale = Vector2.ONE * _base_scale * FishVisualBuilder2D.display_length(species) / 70.0
 
 
+## This individual's colour shift (0 for a species that doesn't vary); Progress buckets it into
+## a "morph" for the collection.
+func hue_shift_value() -> float:
+	if _material == null:
+		return 0.0
+	var value = _material.get_shader_parameter("hue_shift")
+	return float(value) if value != null else 0.0
+
+
 ## On-screen hit radius for tap-to-inspect (TankController._unhandled_input), in px.
 func tap_radius() -> float:
 	return maxf(26.0, FishVisualBuilder2D.display_length(species) * _base_scale * 0.6)

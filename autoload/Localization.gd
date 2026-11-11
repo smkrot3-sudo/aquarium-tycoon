@@ -329,6 +329,7 @@ var _strings: Dictionary = {
 
 func _init() -> void:
 	_strings.merge(LoreStrings.build(), true)
+	_strings.merge(GameStrings.build(), true)
 
 
 func t(key: String, args: Array = []) -> String:

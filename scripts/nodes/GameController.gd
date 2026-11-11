@@ -19,7 +19,7 @@ const FEED_COST := 1
 const ALERT_REPEAT_SECONDS := 40.0
 const BAILOUT_CASH := 20
 
-@onready var _tanks: Array[TankController] = [%TankInstance, %Tank2Instance, %Tank3Instance, %Tank4Instance]
+@onready var _tanks: Array[TankController] = [%TankInstance, %Tank2Instance, %Tank3Instance, %Tank4Instance, %Tank5Instance, %Tank6Instance, %Tank7Instance, %Tank8Instance]
 @onready var _ui_layer: CanvasLayer = $UI
 var _current_tank_index: int = 0
 
@@ -33,6 +33,10 @@ var guide: GuidePanel
 var settings: SettingsPanel
 var welcome: WelcomePanel
 var fish_detail: FishDetailPanel
+var new_game: NewGamePanel
+var business: BusinessPanel
+var stats: StatsPanel
+var advisor: AdvisorPanel
 var toast_view: ToastView
 
 ## Where the in-app update flow currently is — see UpdateChecker (autoload) for the actual
@@ -42,6 +46,10 @@ var update_state: UpdateState = UpdateState.IDLE
 var update_status_text: String = ""
 
 var _show_welcome_on_start: bool = false
+## True until the player has picked a mode and difficulty for this (new) game.
+var _needs_setup: bool = false
+var tool: int = TankController.Tool.HAND
+var _pinch_count: int = 0
 var _alert_last_shown: Dictionary = {}  ## message key -> Time.get_ticks_msec() of last toast
 
 
@@ -62,16 +70,31 @@ func _ready() -> void:
 	if had_save:
 		SaveManager.load_game()
 	_show_welcome_on_start = not had_save
+	_needs_setup = not had_save
+	EconomyManager.apply_mode()
 
 	for tank in _tanks:
 		tank.game = self
 		tank.water_quality_alert.connect(_on_water_quality_alert)
 		tank.fish_born.connect(_on_fish_born)
 		tank.fish_died.connect(_on_fish_died)
+		tank.tool_cleaned.connect(_on_tool_cleaned)
 		tank.refresh_equipment_visuals()
 	EconomyManager.cash_changed.connect(func(_c): state_changed.emit())
 	state_changed.connect(func(): _check_bailout.call_deferred())
 	EconomyManager.unlock_tier_changed.connect(_on_unlock_tier_changed)
+	state_changed.connect(func(): Progress.check.call_deferred())
+	Progress.mission_completed.connect(_on_mission_completed)
+	Progress.stage_changed.connect(_on_stage_changed)
+	Progress.collection_reward.connect(_on_collection_reward)
+	Progress.visitors_paid.connect(func(visitors, income): toast(Localization.t("toast_visitors", [visitors, income]), "good"))
+	Market.order_completed.connect(_on_order_completed)
+	Market.order_expired.connect(_on_order_expired)
+	Market.rare_arrived.connect(_on_rare_arrived)
+	Market.rare_left.connect(func(_id): state_changed.emit())
+	Market.auction_resolved.connect(_on_auction_resolved)
+	Market.contest_started.connect(_on_contest_started)
+	Market.orders_changed.connect(func(): state_changed.emit())
 	Localization.language_changed.connect(func(_l): _rebuild_ui.call_deferred())
 
 	UpdateChecker.check_completed.connect(_on_update_check_completed)
@@ -117,13 +140,21 @@ func _build_ui() -> void:
 	settings = SettingsPanel.new()
 	welcome = WelcomePanel.new()
 	fish_detail = FishDetailPanel.new()
-	for panel in [shop, fish_panel, tank_panel, guide, settings, welcome, fish_detail]:
+	new_game = NewGamePanel.new()
+	business = BusinessPanel.new()
+	stats = StatsPanel.new()
+	advisor = AdvisorPanel.new()
+	for panel in _all_panels():
 		panel.game = self
 		ui_root.add_child(panel)
 
 	## Last child = drawn over everything, panels included.
 	toast_view = ToastView.new()
 	ui_root.add_child(toast_view)
+
+
+func _all_panels() -> Array:
+	return [shop, fish_panel, tank_panel, guide, settings, welcome, fish_detail, new_game, business, stats, advisor]
 
 
 func _rebuild_ui() -> void:
@@ -151,6 +182,9 @@ func go_home() -> void:
 
 
 func start_game() -> void:
+	if _needs_setup:
+		new_game.open()
+		return
 	home.visible = false
 	TimeManager.paused = false
 	AudioManager.play("splash")
@@ -161,7 +195,7 @@ func start_game() -> void:
 
 
 func close_panels() -> void:
-	for panel in [shop, fish_panel, tank_panel, guide, settings, welcome, fish_detail]:
+	for panel in _all_panels():
 		if panel != null and panel.visible:
 			panel.close()
 
@@ -169,8 +203,8 @@ func close_panels() -> void:
 ## Tapping a fish directly in the tank (TankController._unhandled_input) opens this card —
 ## does NOT pause or leave the tank, so the player can keep tapping around while it's up.
 func open_fish_detail(fish: FishController) -> void:
-	for panel in [shop, fish_panel, tank_panel, guide, settings, welcome]:
-		if panel != null and panel.visible:
+	for panel in _all_panels():
+		if panel != fish_detail and panel != null and panel.visible:
 			panel.close()
 	fish_detail.inspect(fish)
 	fish_detail.open()
@@ -184,6 +218,21 @@ func sell_specific_fish(fish: FishController) -> int:
 	toast(Localization.t("toast_sold", [fish.fish_name, value]), "good")
 	state_changed.emit()
 	return value
+
+
+## The new-game screen's Start button: fixes the mode and difficulty, sets the starting cash and
+## carries on into the game.
+func begin_new_game(mode: int, difficulty: int) -> void:
+	GameState.mode = mode
+	GameState.difficulty = difficulty
+	EconomyManager.cash = GameState.start_cash()
+	EconomyManager.lifetime_earnings = 0
+	EconomyManager.unlock_tier = 0
+	EconomyManager.apply_mode()
+	EconomyManager.cash_changed.emit(EconomyManager.cash)
+	_needs_setup = false
+	new_game.close()
+	start_game()
 
 
 ## tab < 0 = the fish tab that matches the tank on screen.
@@ -207,6 +256,21 @@ func open_tank_panel() -> void:
 func open_guide() -> void:
 	close_panels()
 	guide.open()
+
+
+func open_business(tab: int = 0) -> void:
+	close_panels()
+	business.open_tab(tab)
+
+
+func open_stats() -> void:
+	close_panels()
+	stats.open()
+
+
+func open_advisor() -> void:
+	close_panels()
+	advisor.open()
 
 
 func open_settings() -> void:
@@ -392,6 +456,8 @@ func buy_equipment(equipment_id: String) -> bool:
 func fish_block_reason(species: FishSpeciesData) -> String:
 	if species.unlock_tier > EconomyManager.unlock_tier:
 		return _tier_lock_text(species.unlock_tier)
+	if not Market.in_stock(species):
+		return Localization.t("shop_out_of_stock")
 	var tank := current_tank()
 	return _localized_compatibility_reason(species, tank, tank.tank_type == TankController.TankType.SALTWATER)
 
@@ -442,6 +508,7 @@ func buy_fish(species_id: String, sex: int = -1) -> bool:
 		toast(Localization.t("alert_not_enough_cash"), "bad")
 		return false
 	var fish := current_tank().add_fish(species, false, sex)
+	Progress.bump("fish_bought")
 	AudioManager.play("coin")
 	toast(Localization.t("toast_bought_named", [fish.fish_name, Localization.t("sp_%s" % species_id)]), "good")
 	state_changed.emit()
@@ -517,6 +584,7 @@ func feed(force: bool = false) -> bool:
 		toast(Localization.t("alert_not_enough_cash_for_food"), "bad")
 		return false
 	tank.feed(ShopManager.get_food("basic_flakes"))
+	Progress.bump("feeds")
 	AudioManager.play("feed")
 	state_changed.emit()
 	return true
@@ -528,6 +596,7 @@ func _on_water_change() -> void:
 
 func water_change() -> void:
 	current_tank().perform_water_change(0.25)
+	Progress.bump("water_changes")
 	AudioManager.play("splash")
 	toast(Localization.t("toast_water_changed"), "good")
 	state_changed.emit()
@@ -571,7 +640,16 @@ func _on_fast_forward() -> void:
 ## Wipes all progress back to a brand-new game (Settings -> New game).
 func reset_game() -> void:
 	SaveManager.delete_save()
+	GameState.mode = GameState.Mode.CAREER
+	GameState.difficulty = GameState.Difficulty.NORMAL
+	Progress.reset()
+	Market.reset()
+	History.reset()
+	TimeManager.reset_speed()
+	set_tool(TankController.Tool.HAND)
+	_needs_setup = true
 	EconomyManager.from_save_dict({})
+	EconomyManager.apply_mode()
 	EconomyManager.cash_changed.emit(EconomyManager.cash)
 	TimeManager.sim_minutes_total = 0.0
 	TimeManager.current_season = TimeManager.Season.SPRING
@@ -611,6 +689,10 @@ func current_tip() -> Dictionary:
 			if tank.temperature < fish.species.temp_min_c:
 				var key := "tip_heater_failed" if tank.heater_failed else "tip_buy_heater"
 				return {"text": Localization.t(key), "action": to_shop_equipment, "kind": "bad"}
+	if tank.algae_level() >= 55.0:
+		return {"text": Localization.t("tip_algae"), "action": set_tool.bind(TankController.Tool.SCRAPER), "kind": "warn"}
+	if tank.mulm_level() >= 55.0:
+		return {"text": Localization.t("tip_mulm"), "action": set_tool.bind(TankController.Tool.VACUUM), "kind": "warn"}
 	if tank.stocking_fraction() > 0.9:
 		return {"text": Localization.t("tip_crowded"), "action": open_fish_panel, "kind": "warn"}
 
@@ -637,6 +719,8 @@ func current_tip() -> Dictionary:
 		return {"text": Localization.t("tip_fry", [fry]), "action": open_fish_panel, "kind": "info"}
 	if tank.light_equipment == null:
 		return {"text": Localization.t("tip_buy_light"), "action": to_shop_equipment, "kind": "info"}
+	if Market.orders_ready_count() > 0:
+		return {"text": Localization.t("tip_order_ready"), "action": open_business.bind(BusinessPanel.Tab.ORDERS), "kind": "info"}
 	var to_next := Economy.earnings_to_next_tier(EconomyManager.lifetime_earnings)
 	if to_next > 0:
 		return {"text": Localization.t("tip_next_tier", [to_next, EconomyManager.unlock_tier + 1]), "action": open_fish_panel, "kind": "info"}
@@ -649,6 +733,164 @@ static func _count_species(fish_list: Array, species: FishSpeciesData) -> int:
 		if fish.species == species:
 			count += 1
 	return count
+
+
+# ----------------------------------------------------------------------------------------
+# Hand tools: dropping food by tapping, scraping the glass, vacuuming the sand
+# ----------------------------------------------------------------------------------------
+
+func set_tool(new_tool: int) -> void:
+	tool = new_tool
+	for tank in _tanks:
+		tank.tool = new_tool
+	state_changed.emit()
+
+
+## One tap of the food tool. Every fourth pinch costs the usual $1 for a feeding.
+func pinch_feed(tank: TankController, point: Vector2) -> void:
+	if tank.get_fish().is_empty():
+		toast(Localization.t("alert_no_fish_to_feed"), "bad")
+		return
+	_pinch_count += 1
+	if _pinch_count % 4 == 1:
+		if not EconomyManager.spend(FEED_COST, "Bought food"):
+			toast(Localization.t("alert_not_enough_cash_for_food"), "bad")
+			return
+	tank.pinch(ShopManager.get_food("basic_flakes"), point)
+	AudioManager.play("feed")
+	state_changed.emit()
+
+
+func _on_tool_cleaned(tool_kind: int, blobs: int) -> void:
+	Progress.bump("scraped" if tool_kind == TankController.Tool.SCRAPER else "vacuumed", blobs)
+	AudioManager.play("scrub")
+	state_changed.emit()
+
+
+# ----------------------------------------------------------------------------------------
+# Career, collection and market events -> toasts
+# ----------------------------------------------------------------------------------------
+
+func _on_mission_completed(mission_id: String, reward: int) -> void:
+	toast(Localization.t("toast_mission", [Localization.t("ms_%s" % mission_id), reward]), "good")
+	AudioManager.play("fanfare")
+
+
+func _on_stage_changed(new_stage: int) -> void:
+	if new_stage > Goals.STAGE_COUNT:
+		toast(Localization.t("toast_career_done"), "good")
+	else:
+		toast(Localization.t("toast_stage_up", [Localization.t("stage_%d" % new_stage)]), "good")
+	AudioManager.play("fanfare")
+	state_changed.emit()
+
+
+func _on_collection_reward(kind: String, species_id: String, amount: int) -> void:
+	match kind:
+		"bred":
+			toast(Localization.t("toast_collect_bred", [Localization.t("sp_%s" % species_id), amount]), "good")
+		"morph":
+			toast(Localization.t("toast_collect_morph", [Localization.t("sp_%s" % species_id), amount]), "good")
+		_:
+			toast(Localization.t("toast_collect_milestone", [amount]), "good")
+	AudioManager.play("coin")
+
+
+func _on_order_completed(order: Dictionary, reward: int) -> void:
+	toast(Localization.t("toast_order_done", [Localization.t("sp_%s" % order["species_id"]), reward]), "good")
+	AudioManager.play("fanfare")
+	state_changed.emit()
+
+
+func _on_order_expired(order: Dictionary) -> void:
+	toast(Localization.t("toast_order_expired", [Localization.t("sp_%s" % order["species_id"])]), "info")
+	state_changed.emit()
+
+
+func _on_rare_arrived(species_ids: Array) -> void:
+	var names: Array = []
+	for id in species_ids:
+		names.append(Localization.t("sp_%s" % id))
+	toast(Localization.t("toast_rare_arrived", [", ".join(names)]), "info")
+	state_changed.emit()
+
+
+func _on_auction_resolved(fish_name: String, _species_id: String, amount: int) -> void:
+	toast(Localization.t("toast_auction_done", [fish_name, amount]), "good")
+	AudioManager.play("cash")
+	state_changed.emit()
+
+
+func _on_contest_started() -> void:
+	toast(Localization.t("toast_contest_started"), "info")
+	state_changed.emit()
+
+
+# ----------------------------------------------------------------------------------------
+# The advisor: why is the coach line saying that?
+# ----------------------------------------------------------------------------------------
+
+## {"title": coach line, "lines": causes + what to do, "metric": History field to graph or "",
+## "fish": the fish involved}. Mirrors the order of current_tip().
+func advice() -> Dictionary:
+	var tank := current_tank()
+	var lines: Array = []
+	var metric := ""
+	var fish_list: Array = []
+	var cold := false
+	for fish in tank.get_fish():
+		if tank.temperature < fish.species.temp_min_c:
+			cold = true
+	if tank.filter == null:
+		lines.append(Localization.t("advice_no_filter"))
+	elif tank.ammonia > WaterChemistry.AMMONIA_DANGER or tank.nitrite > WaterChemistry.NITRITE_DANGER or tank.nitrate > WaterChemistry.NITRATE_DANGER:
+		metric = "ammonia" if tank.ammonia > WaterChemistry.AMMONIA_DANGER else ("nitrite" if tank.nitrite > WaterChemistry.NITRITE_DANGER else "nitrate")
+		lines.append(Localization.t("advice_water_high"))
+		var causes := 0
+		if tank.stocking_fraction() >= 0.7:
+			lines.append(Localization.t("advice_cause_stock", [int(round(tank.stocking_fraction() * 100.0))]))
+			causes += 1
+		if tank.filter_maturity < 70.0:
+			lines.append(Localization.t("advice_cause_filter", [int(tank.filter_maturity)]))
+			causes += 1
+		if tank.days_since_water_change >= 5.0:
+			lines.append(Localization.t("advice_cause_change", [int(tank.days_since_water_change)]))
+			causes += 1
+		if tank.mulm_level() >= 30.0:
+			lines.append(Localization.t("advice_cause_mulm", [int(tank.mulm_level())]))
+			causes += 1
+		if causes == 0:
+			lines.append(Localization.t("advice_cause_food"))
+		lines.append(Localization.t("advice_fix_water"))
+	elif tank.hungry_fish_count() > 0:
+		for fish in tank.get_fish():
+			if fish.hunger < 35.0:
+				fish_list.append(fish)
+		lines.append(Localization.t("advice_hungry", [fish_list.size()]))
+		lines.append(Localization.t("advice_fix_feed"))
+	elif tank.sick_fish_count() > 0:
+		for fish in tank.get_fish():
+			if fish.is_sick:
+				fish_list.append(fish)
+		lines.append(Localization.t("advice_sick", [fish_list.size()]))
+		lines.append(Localization.t("advice_cause_change", [int(tank.days_since_water_change)]))
+		lines.append(Localization.t("advice_fix_treat"))
+	elif cold:
+		metric = "temp"
+		lines.append(Localization.t("advice_cold", [tank.temperature]))
+		lines.append(Localization.t("advice_fix_heater"))
+	elif tank.algae_level() >= 55.0:
+		metric = "algae"
+		lines.append(Localization.t("advice_algae", [int(tank.algae_level())]))
+		lines.append(Localization.t("advice_fix_algae"))
+	elif tank.mulm_level() >= 55.0:
+		metric = "mulm"
+		lines.append(Localization.t("advice_mulm", [int(tank.mulm_level())]))
+		lines.append(Localization.t("advice_fix_mulm"))
+	else:
+		metric = "nitrate"
+		lines.append(Localization.t("advice_ok"))
+	return {"title": current_tip()["text"], "lines": lines, "metric": metric, "fish": fish_list}
 
 
 # ----------------------------------------------------------------------------------------

@@ -11,18 +11,41 @@ const MAX_OFFLINE_SIM_DAYS := 3.0           ## cap how far offline-progress catc
 signal sim_tick(hours_elapsed: float)       ## emitted roughly once per in-game hour
 signal sim_day_elapsed(day: int)
 signal season_changed(season: Season)
+signal speed_changed
+
+## The player's speed button cycles 1x -> 2x -> 4x -> paused -> 1x.
+const SPEEDS := [1.0, 2.0, 4.0]
 
 var sim_minutes_total: float = 0.0
 var _minutes_accum_since_last_tick: float = 0.0
 var current_season: Season = Season.SPRING
-var paused: bool = false
+var paused: bool = false                    ## set by the home screen (the game isn't being played)
+var player_paused: bool = false             ## set by the player's pause button
+var speed_index: int = 0
 var time_scale: float = 1.0                 ## debug fast-forward multiplier
 
 
+func cycle_speed() -> void:
+	if player_paused:
+		player_paused = false
+		speed_index = 0
+	elif speed_index >= SPEEDS.size() - 1:
+		player_paused = true
+	else:
+		speed_index += 1
+	speed_changed.emit()
+
+
+func reset_speed() -> void:
+	player_paused = false
+	speed_index = 0
+	speed_changed.emit()
+
+
 func _process(delta: float) -> void:
-	if paused:
+	if paused or player_paused:
 		return
-	var minutes := delta * SIM_MINUTES_PER_REAL_SECOND * time_scale
+	var minutes: float = delta * SIM_MINUTES_PER_REAL_SECOND * time_scale * SPEEDS[speed_index]
 	sim_minutes_total += minutes
 	_minutes_accum_since_last_tick += minutes
 
