@@ -6,6 +6,8 @@
 script = ExtResource("1")
 id = "guppy"
 display_name = "Guppy"
+scientific_name = "Poecilia reticulata"
+swim_style = "cruiser"
 description = "A tiny, colorful, famously easy-to-breed livebearer. The classic first aquarium fish."
 archetype_id = "livebearer"
 palette_color = Color(0.9, 0.5, 0.15, 1)

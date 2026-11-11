@@ -5,9 +5,9 @@ class_name GameController
 ## never touches the simulation directly — it calls the methods here and re-reads state when
 ## `state_changed` fires.
 ##
-## Multi-tank: exactly two tank slots exist as scene nodes from the start (see Main.tscn).
-## Tank 1 is always owned; Tank 2 starts `locked` and is configured from a TankPresetData when
-## the player buys it. Only the selected tank is shown.
+## Multi-tank: four tank slots exist as scene nodes from the start (see Main.tscn). Tank 1 is
+## always owned; the others start `locked` and each is configured from a TankPresetData when the
+## player buys a tank (the purchase fills the first free slot). Only the selected tank is shown.
 ##
 ## Localization: every player-facing string is built via Localization.t(). Switching language
 ## simply rebuilds the whole UI tree (_rebuild_ui), so no screen needs its own re-label code.
@@ -19,7 +19,7 @@ const FEED_COST := 1
 const ALERT_REPEAT_SECONDS := 40.0
 const BAILOUT_CASH := 20
 
-@onready var _tanks: Array[TankController] = [%TankInstance, %Tank2Instance]
+@onready var _tanks: Array[TankController] = [%TankInstance, %Tank2Instance, %Tank3Instance, %Tank4Instance]
 @onready var _ui_layer: CanvasLayer = $UI
 var _current_tank_index: int = 0
 
@@ -163,8 +163,11 @@ func close_panels() -> void:
 			panel.close()
 
 
-func open_shop(tab: int = ShopPanel.Tab.FISH) -> void:
+## tab < 0 = the fish tab that matches the tank on screen.
+func open_shop(tab: int = -1) -> void:
 	close_panels()
+	if tab < 0:
+		tab = ShopPanel.Tab.SALT if current_tank().tank_type == TankController.TankType.SALTWATER else ShopPanel.Tab.FRESH
 	shop.open_tab(tab)
 
 
@@ -216,13 +219,40 @@ func _select_tank(index: int) -> void:
 	state_changed.emit()
 
 
-## HUD tank button: flip to the other tank, or straight to the tank shop if there isn't one yet.
+## HUD tank button: on to the next owned tank, or straight to the tank shop if there's only one.
 func cycle_tank() -> void:
-	var other := (_current_tank_index + 1) % _tanks.size()
-	if _tanks[other].locked:
-		open_shop(ShopPanel.Tab.TANKS)
-	else:
-		_select_tank(other)
+	for step in range(1, _tanks.size()):
+		var index := (_current_tank_index + step) % _tanks.size()
+		if not _tanks[index].locked:
+			_select_tank(index)
+			return
+	open_shop(ShopPanel.Tab.TANKS)
+
+
+func owned_tank_count() -> int:
+	var count := 0
+	for tank in _tanks:
+		if not tank.locked:
+			count += 1
+	return count
+
+
+func _first_free_slot() -> int:
+	for i in range(_tanks.size()):
+		if _tanks[i].locked:
+			return i
+	return -1
+
+
+## Index of an owned tank holding the given kind of water, or -1. Prefers the current tank.
+func find_tank_of_type(saltwater: bool) -> int:
+	var wanted := TankController.TankType.SALTWATER if saltwater else TankController.TankType.FRESHWATER
+	if current_tank().tank_type == wanted:
+		return _current_tank_index
+	for i in range(_tanks.size()):
+		if not _tanks[i].locked and _tanks[i].tank_type == wanted:
+			return i
+	return -1
 
 
 func tank_display_name(index: int) -> String:
@@ -232,8 +262,8 @@ func tank_display_name(index: int) -> String:
 
 
 func tank_block_reason(preset: TankPresetData) -> String:
-	if not _tanks[1].locked:
-		return Localization.t("alert_tank2_already_setup")
+	if _first_free_slot() == -1:
+		return Localization.t("alert_no_tank_slots")
 	if preset.unlock_tier > EconomyManager.unlock_tier:
 		return _tier_lock_text(preset.unlock_tier)
 	return ""
@@ -254,9 +284,10 @@ func buy_tank(preset_id: String) -> bool:
 	if not EconomyManager.spend(preset.price, "Bought %s" % preset.display_name):
 		toast(Localization.t("alert_not_enough_cash"), "bad")
 		return false
-	_tanks[1].unlock(preset.tank_liters, preset.tank_type, preset.ambient_temp_base_c)
+	var slot := _first_free_slot()
+	_tanks[slot].unlock(preset.tank_liters, preset.tank_type, preset.ambient_temp_base_c)
 	AudioManager.play("coin")
-	_select_tank(1)
+	_select_tank(slot)
 	toast(Localization.t("toast_bought", [Localization.t("tank_%s" % preset_id)]), "good")
 	return true
 
@@ -520,7 +551,8 @@ func reset_game() -> void:
 	TimeManager.sim_minutes_total = 0.0
 	TimeManager.current_season = TimeManager.Season.SPRING
 	_tanks[0].reset_to_new(false, 40.0, TankController.TankType.FRESHWATER, 22.0)
-	_tanks[1].reset_to_new(true, 40.0, TankController.TankType.FRESHWATER, 22.0)
+	for i in range(1, _tanks.size()):
+		_tanks[i].reset_to_new(true, 40.0, TankController.TankType.FRESHWATER, 22.0)
 	_alert_last_shown.clear()
 	_show_welcome_on_start = true
 	_select_tank(0)
@@ -537,7 +569,7 @@ func current_tip() -> Dictionary:
 	var tank := current_tank()
 	var fish_list := tank.get_fish()
 	var to_shop_equipment := open_shop.bind(ShopPanel.Tab.EQUIPMENT)
-	var to_shop_fish := open_shop.bind(ShopPanel.Tab.FISH)
+	var to_shop_fish := open_shop.bind(-1)
 
 	if tank.filter == null:
 		return {"text": Localization.t("tip_buy_filter"), "action": to_shop_equipment, "kind": "warn"}

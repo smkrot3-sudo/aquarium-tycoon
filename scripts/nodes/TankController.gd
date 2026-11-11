@@ -88,6 +88,8 @@ var _sand_top_y: float = 450.0
 
 ## species_id -> {pos: Vector2, time_left: float}; schooling fish steer around a shared point.
 var _school_targets: Dictionary = {}
+## species_id -> Vector2; "waddler" fish (clownfish) each keep near this spot, like an anemone.
+var _home_points: Dictionary = {}
 
 ## Egg-layer breeding: {species_id: String, count: int, remaining_days: float}
 var pending_egg_batches: Array = []
@@ -153,9 +155,49 @@ func get_school_target(species: FishSpeciesData) -> Vector2:
 	return _school_targets[species.id]["pos"]
 
 
+## A fixed spot each "waddler" species (clownfish) treats as home — picked once and kept, like
+## the anemone a real clownfish never strays far from.
+func get_home_point(species: FishSpeciesData) -> Vector2:
+	if not _home_points.has(species.id):
+		_home_points[species.id] = _random_point(get_zone_for(species).grow(-60.0))
+	return _home_points[species.id]
+
+
+## Roughly where the water surface is, for air-breathing fish (bettas, gouramis) to rise to.
+func get_surface_y() -> float:
+	return HUD_TOP_PX + 30.0
+
+
+## A single bubble released at the surface when an air-breather exhales.
+func spawn_breath_bubble(point: Vector2) -> void:
+	if _bubbles != null:
+		_bubbles.spawn_single(point)
+
+
 static func _random_point(rect: Rect2) -> Vector2:
 	var r := rect.abs()
 	return Vector2(randf_range(r.position.x, r.end.x), randf_range(r.position.y, r.end.y))
+
+
+## Tapping the water itself (not a HUD button — those are Controls and consume the event
+## first) startles nearby fish, the way real fish scatter when you tap the glass. Purely
+## cosmetic flavor; harmless if it never fires.
+func _unhandled_input(event: InputEvent) -> void:
+	if not visible:
+		return
+	var point: Vector2 = Vector2.ZERO
+	var is_tap := false
+	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
+		point = event.position
+		is_tap = true
+	elif event is InputEventScreenTouch and event.pressed:
+		point = event.position
+		is_tap = true
+	if not is_tap or not _view_rect.has_point(point):
+		return
+	for fish in get_fish():
+		if fish.position.distance_to(point) < 220.0:
+			fish.startle(point)
 
 
 func _process(delta: float) -> void:
@@ -352,6 +394,7 @@ func reset_to_new(as_locked: bool, liters: float, type: TankType, ambient_base_c
 	active_events.clear()
 	pending_egg_batches.clear()
 	_school_targets.clear()
+	_home_points.clear()
 	if as_locked and not locked:
 		TankRegistry.unregister_tank(self)
 	elif not as_locked and locked:

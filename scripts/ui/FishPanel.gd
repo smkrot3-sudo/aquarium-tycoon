@@ -90,7 +90,7 @@ func refresh() -> void:
 		empty.add_child(message)
 		var to_shop := UiKit.button(Localization.t("fish_go_shop"), "primary", 72.0)
 		to_shop.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-		to_shop.pressed.connect(func(): game.open_shop(ShopPanel.Tab.FISH))
+		to_shop.pressed.connect(func(): game.open_shop(ShopPanel.Tab.FRESH))
 		empty.add_child(to_shop)
 		_list.add_child(empty)
 		return

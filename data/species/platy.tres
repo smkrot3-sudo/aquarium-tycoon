@@ -6,6 +6,8 @@
 script = ExtResource("1")
 id = "platy"
 display_name = "Platy"
+scientific_name = "Xiphophorus maculatus"
+swim_style = "cruiser"
 description = "A cheerful, chunky livebearer that comes in many colors. A slightly bigger step up from the guppy."
 archetype_id = "livebearer"
 palette_color = Color(0.9, 0.25, 0.35, 1)

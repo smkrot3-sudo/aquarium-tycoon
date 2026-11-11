@@ -5,7 +5,7 @@
 [resource]
 script = ExtResource("1")
 id = "marine_reef_tank"
-display_name = "Marine Reef Tank (60L)"
+display_name = "Saltwater Tank (60L)"
 price = 150
 unlock_tier = 2
 tank_liters = 60.0

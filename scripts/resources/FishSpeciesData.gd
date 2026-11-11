@@ -7,6 +7,13 @@ enum Temperament { PEACEFUL, SEMI_AGGRESSIVE, AGGRESSIVE }
 @export var id: String = ""
 @export var display_name: String = ""
 @export_multiline var description: String = ""
+## Latin name, shown in the encyclopedia.
+@export var scientific_name: String = ""
+## How the fish moves on screen (FishController): "cruiser" (steady laps), "darter" (quick
+## schooling bursts), "hoverer" (slow, hangs in place), "bottom" (scoots along the sand),
+## "eel" (bottom, very wriggly), "crawler" (walks on the sand), "snail" (creeps), "waddler"
+## (clownfish wobble), "seahorse" (drifts upright). Empty = derived from archetype_id.
+@export var swim_style: String = ""
 
 ## Visual archetype used for procedural fallback shape/sizing (FishShapeBuilder2D).
 ## One of: "schooler", "livebearer", "labyrinth", "bottom_dweller", "invertebrate".

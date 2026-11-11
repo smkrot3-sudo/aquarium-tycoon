@@ -6,6 +6,8 @@
 script = ExtResource("1")
 id = "blue_green_chromis"
 display_name = "Blue-Green Chromis"
+scientific_name = "Chromis viridis"
+swim_style = "darter"
 description = "A hardy, inexpensive reef schooling fish, bright blue-green and always active mid-water. A classic 'starter school' for a new reef tank."
 archetype_id = "schooler"
 palette_color = Color(0.15, 0.55, 0.75, 1)

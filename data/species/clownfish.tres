@@ -6,6 +6,8 @@
 script = ExtResource("1")
 id = "clownfish"
 display_name = "Clownfish"
+scientific_name = "Amphiprion ocellaris"
+swim_style = "waddler"
 description = "A hardy, iconic reef fish that pairs up and lays eggs on rock near its chosen shelter. The easiest marine species to start with."
 archetype_id = "livebearer"
 palette_color = Color(0.9, 0.4, 0.05, 1)

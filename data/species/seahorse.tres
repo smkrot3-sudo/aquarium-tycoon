@@ -1,0 +1,40 @@
+[gd_resource type="Resource" script_class="FishSpeciesData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/resources/FishSpeciesData.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "seahorse"
+display_name = "Lined Seahorse"
+scientific_name = "Hippocampus erectus"
+swim_style = "seahorse"
+archetype_id = "tall"
+palette_color = Color(0.95, 0.75, 0.15, 1)
+temp_min_c = 22.0
+temp_max_c = 26.0
+ph_min = 7.9
+ph_max = 8.4
+min_tank_liters = 60.0
+is_marine = true
+diet_type = 2
+bioload_factor = 0.6
+temperament = 0
+compatibility_tags = Array[String](["seahorse"])
+schooling_min_group = 1
+disease_resistance = 0.3
+max_size_cm = 15.0
+growth_rate_cm_per_sim_day = 0.04
+maturity_age_sim_days = 200.0
+lifespan_sim_days = 1500.0
+is_livebearer = true
+pair_required = true
+breeding_cooldown_sim_days = 30.0
+fry_per_batch_min = 20
+fry_per_batch_max = 100
+egg_incubation_sim_days = 0.0
+base_price = 85
+sell_price_adult = 55
+sell_price_fry = 8
+rarity_tier = 3
+unlock_tier = 4
+source_note = "Gameplay values; see data/generate_species.py for how ranges were chosen."

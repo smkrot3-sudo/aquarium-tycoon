@@ -62,6 +62,18 @@ func _make_bubble(radius: float) -> Node2D:
 	return root
 
 
+## A one-off bubble released from `point` (e.g. a labyrinth fish taking a breath at the
+## surface) that rises, wobbles and frees itself — not part of the ambient pool above.
+func spawn_single(point: Vector2) -> void:
+	var bubble := _make_bubble(randf_range(3.0, 5.0))
+	bubble.position = point
+	add_child(bubble)
+	var tween := create_tween()
+	tween.tween_property(bubble, "position:y", point.y - randf_range(60.0, 110.0), 1.0)
+	tween.parallel().tween_property(bubble, "modulate:a", 0.0, 1.0).set_delay(0.5)
+	tween.tween_callback(bubble.queue_free)
+
+
 func _respawn(entry: Dictionary, initial: bool = false) -> void:
 	var x: float = _bounds.position.x + randf() * _bounds.size.x
 	if entry["column"]:

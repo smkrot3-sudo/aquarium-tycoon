@@ -6,6 +6,8 @@
 script = ExtResource("1")
 id = "honey_gourami"
 display_name = "Honey Gourami"
+scientific_name = "Trichogaster chuna"
+swim_style = "hoverer"
 description = "A calm labyrinth fish that breathes surface air and builds a bubble nest for its eggs. Does best in quiet, lightly-flowing water."
 archetype_id = "labyrinth"
 palette_color = Color(0.9, 0.7, 0.2, 1)

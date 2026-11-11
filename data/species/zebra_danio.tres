@@ -6,6 +6,8 @@
 script = ExtResource("1")
 id = "zebra_danio"
 display_name = "Zebra Danio"
+scientific_name = "Danio rerio"
+swim_style = "darter"
 description = "A hardy, fast, active schooling fish with bold stripes. A known fin-nipper — keep it away from long-finned tankmates."
 archetype_id = "schooler"
 palette_color = Color(0.82, 0.8, 0.68, 1)

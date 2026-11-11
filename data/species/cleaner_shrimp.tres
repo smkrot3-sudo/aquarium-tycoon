@@ -6,6 +6,8 @@
 script = ExtResource("1")
 id = "cleaner_shrimp"
 display_name = "Cleaner Shrimp"
+scientific_name = "Lysmata amboinensis"
+swim_style = "crawler"
 description = "A reef-safe scavenger that picks up leftover food and detritus. A cheap, reliable second income source for a marine tank, same role cherry shrimp play in freshwater."
 archetype_id = "invertebrate"
 palette_color = Color(0.85, 0.35, 0.3, 1)

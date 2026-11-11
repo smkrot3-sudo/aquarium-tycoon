@@ -1,0 +1,40 @@
+[gd_resource type="Resource" script_class="FishSpeciesData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/resources/FishSpeciesData.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "bristlenose_pleco"
+display_name = "Bristlenose Pleco"
+scientific_name = "Ancistrus cirrhosus"
+swim_style = "bottom"
+archetype_id = "bottom_dweller"
+palette_color = Color(0.4, 0.3, 0.2, 1)
+temp_min_c = 21.0
+temp_max_c = 27.0
+ph_min = 6.0
+ph_max = 7.8
+min_tank_liters = 100.0
+is_marine = false
+diet_type = 0
+bioload_factor = 1.2
+temperament = 0
+compatibility_tags = Array[String](["bottom", "algae_eater"])
+schooling_min_group = 1
+disease_resistance = 0.7
+max_size_cm = 13.0
+growth_rate_cm_per_sim_day = 0.05
+maturity_age_sim_days = 180.0
+lifespan_sim_days = 4000.0
+is_livebearer = false
+pair_required = true
+breeding_cooldown_sim_days = 40.0
+fry_per_batch_min = 10
+fry_per_batch_max = 30
+egg_incubation_sim_days = 5.0
+base_price = 14
+sell_price_adult = 9
+sell_price_fry = 2
+rarity_tier = 2
+unlock_tier = 2
+source_note = "Gameplay values; see data/generate_species.py for how ranges were chosen."

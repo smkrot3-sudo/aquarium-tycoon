@@ -27,15 +27,17 @@ func _ready() -> void:
 	_check("Tapping the filter card installs a filter", tank.filter != null and tank.filter.id == "basic_filter")
 	_check("...and takes the money", EconomyManager.cash == 48)
 
-	await _tap_text("דגים")
-	await _tap_text("$5")
-	await _tap_text("$5")
+	await _tap_text("דגי מים מתוקים")
+	await _tap_card_buy("גופי")
+	await _tap_card_buy("גופי")
 	_check("Tapping the guppy card twice adds two guppies", _main.count_fish("guppy", false) == 2)
 	_check("...and takes the money", EconomyManager.cash == 38)
 
-	await _tap_text("$12")
-	_check("Not enough for... (betta is $12, affordable) adds a betta", _main.count_fish("betta", false) == 1)
+	await _tap_card_buy("בטא (דג קרב)")
+	_check("Tapping the betta card ($12, affordable) adds a betta", _main.count_fish("betta", false) == 1)
 
+	await _tap_text("דגי מים מלוחים")
+	_check("Saltwater tab shows the switch-tank banner (freshwater tank on screen)", _main.shop._banner.visible)
 	await _tap_icon(_main.shop, "close")
 	_check("Close button closes the shop", not _main.shop.visible)
 
@@ -53,7 +55,7 @@ func _ready() -> void:
 	await _tap_text("הדגים שלי")
 	_check("Bottom-bar My Fish opens the panel", _main.fish_panel.visible)
 	cash_before = EconomyManager.cash
-	await _tap_text("$10")
+	await _tap_card_buy("בטא (דג קרב)")
 	_check("Sell button sells the betta", _main.count_fish("betta", false) == 0 and EconomyManager.cash == cash_before + 10)
 	await _tap_icon(_main.fish_panel, "close")
 
@@ -61,10 +63,17 @@ func _ready() -> void:
 	_check("Bottom-bar Tank Status opens the panel", _main.tank_panel.visible)
 	await _tap_icon(_main.tank_panel, "close")
 
-	await _tap_text("מדריך")
+	await _tap_text("אנציקלופדיה")
 	_check("Bottom-bar Guide opens the guide", _main.guide.visible)
 	await _tap_text("ציוד")
 	_check("Guide tab switches", _main.guide._tab == GuidePanel.Tab.EQUIPMENT and _main.guide._list.get_child_count() >= 10)
+
+	await _tap_text("דגי מים מתוקים")
+	await _tap_card_buy("גופי")
+	_check("Tapping a fish tile in the album opens its species page", _main.guide._detail_species != null and _main.guide._detail_species.id == "guppy")
+	_check("Species page shows its real-world origin text", Localization.t("origin_sp_guppy") in _get_all_text(_main.guide))
+	await _tap_text("חזרה לרשימה")
+	_check("Back button returns to the album", _main.guide._detail_species == null and _main.guide._list.visible)
 	await _tap_icon(_main.guide, "close")
 
 	await _tap_text("חנות")
@@ -105,6 +114,15 @@ func _frames(count: int) -> void:
 		await get_tree().process_frame
 
 
+func _find_all_buttons(node: Node) -> Array:
+	var out: Array = []
+	if node is Button:
+		out.append(node)
+	for child in node.get_children():
+		out.append_array(_find_all_buttons(child))
+	return out
+
+
 func _button_text(button: Button) -> String:
 	if button.has_meta("label"):
 		return (button.get_meta("label") as Label).text
@@ -141,6 +159,66 @@ func _find_icon_button(node: Node, kind: String) -> Button:
 		if found != null:
 			return found
 	return null
+
+
+func _find_label(node: Node, text: String) -> Label:
+	if node is Label and node.text == text and node.is_visible_in_tree():
+		return node
+	for child in node.get_children():
+		var found := _find_label(child, text)
+		if found != null:
+			return found
+	return null
+
+
+## Finds a card by its title label (the species/item name), then taps its button — a
+## descendant button (price/buy/sell, as in the Shop and Fish panel) if there is one, otherwise
+## an ANCESTOR button (the guide album, where the whole tile is one Button around the label).
+## Robust against many cards sharing the same price, which plain price-text matching can't.
+func _tap_card_buy(title: String) -> void:
+	var label := _find_label(_main.ui_root, title)
+	if label == null:
+		_failures += 1
+		print("[FAIL] no visible card titled '%s'" % title)
+		return
+	var row: Node = label.get_parent().get_parent()
+	await _scroll_into_view(row)
+	var buttons := _find_all_buttons(row)
+	if buttons.is_empty():
+		var ancestor: Node = row
+		while ancestor != null and not (ancestor is Button):
+			ancestor = ancestor.get_parent()
+		if ancestor != null:
+			buttons = [ancestor]
+	if buttons.is_empty():
+		_failures += 1
+		print("[FAIL] card '%s' has no button" % title)
+		return
+	await _tap_node(buttons[0])
+
+
+func _get_all_text(node: Node) -> String:
+	var out := ""
+	if node is Label:
+		out += (node as Label).text + "\n"
+	for child in node.get_children():
+		out += _get_all_text(child)
+	return out
+
+
+## Long card lists (41 species) can place a card below the viewport, where a synthetic click
+## at its true screen position lands outside the window and does nothing — real scrolling
+## finger-drag isn't simulated here, so scroll programmatically instead.
+func _scroll_into_view(control: Control) -> void:
+	var scroll: Node = control.get_parent()
+	while scroll != null and not (scroll is ScrollContainer):
+		scroll = scroll.get_parent()
+	if scroll == null:
+		return
+	var content: Control = scroll.get_child(0)
+	var local_y: float = control.get_global_rect().position.y - content.get_global_rect().position.y
+	scroll.scroll_vertical = maxi(0, int(local_y - 60.0))
+	await _frames(6)
 
 
 func _tap_text(text: String) -> void:

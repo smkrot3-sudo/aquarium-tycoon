@@ -1,11 +1,11 @@
 extends ModalPanel
 class_name ShopPanel
-## The shop: three tabs (fish / equipment / tanks) of cards generated straight from
-## ShopManager's catalogs — adding a species or an item file adds its card, no UI work. Every
-## card says in plain words why it can't be bought when it can't (locked tier, wrong water,
-## tank too small...), instead of a button that silently does nothing.
+## The shop: four tabs (freshwater fish / saltwater fish / equipment / tanks) of cards generated
+## straight from ShopManager's catalogs — adding a species or an item file adds its card, no UI
+## work. Every card says in plain words why it can't be bought when it can't (locked level,
+## wrong water, tank too small...), instead of a button that silently does nothing.
 
-enum Tab { FISH, EQUIPMENT, TANKS }
+enum Tab { FRESH, SALT, EQUIPMENT, TANKS }
 
 ## Tier variants reuse their base tier's icon — same category of equipment either way.
 const EQUIPMENT_ICON := {
@@ -15,12 +15,16 @@ const EQUIPMENT_ICON := {
 	"digital_test_kit": "test_kit",
 }
 
-var _tab: int = Tab.FISH
+var _tab: int = Tab.FRESH
 var _tab_buttons: Array[Button] = []
 var _scroll: ScrollContainer
 var _grid: GridContainer
 var _cash_label: Label
 var _tier_label: Label
+var _banner: PanelContainer
+var _banner_label: Label
+var _banner_button: Button
+var _banner_action: Callable
 
 
 func _build() -> void:
@@ -38,14 +42,30 @@ func _build() -> void:
 
 	var tabs := UiKit.hbox(8)
 	body.add_child(tabs)
-	var names := [Localization.t("guide_tab_fish"), Localization.t("guide_tab_equipment"), Localization.t("shop_tab_tanks")]
+	var names := [Localization.t("shop_tab_fresh"), Localization.t("shop_tab_salt"), Localization.t("guide_tab_equipment"), Localization.t("shop_tab_tanks")]
 	for i in range(names.size()):
-		var tab_button := UiKit.button(names[i], "tab", 60.0)
+		var tab_button := UiKit.button(names[i], "tab", 60.0, UiKit.FONT_BODY)
 		tab_button.toggle_mode = true
 		tab_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		tab_button.clip_text = true
 		tab_button.pressed.connect(open_tab.bind(i))
 		tabs.add_child(tab_button)
 		_tab_buttons.append(tab_button)
+
+	## Shown when the fish on this tab can't live in the tank currently on screen.
+	_banner = UiKit.panel(Color(0.3, 0.2, 0.05, 1.0), 16, 16.0, 8.0)
+	body.add_child(_banner)
+	var banner_row := UiKit.hbox(12)
+	_banner.add_child(banner_row)
+	_banner_label = UiKit.paragraph("", UiKit.FONT_SMALL, UiKit.COL_GOLD)
+	_banner_label.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	banner_row.add_child(_banner_label)
+	_banner_button = UiKit.button("", "gold", 56.0, UiKit.FONT_BODY)
+	_banner_button.pressed.connect(func():
+		if _banner_action.is_valid():
+			_banner_action.call()
+	)
+	banner_row.add_child(_banner_button)
 
 	_scroll = UiKit.scroll()
 	body.add_child(_scroll)
@@ -81,13 +101,16 @@ func refresh() -> void:
 	else:
 		_tier_label.text = Localization.t("shop_tier_max", [EconomyManager.unlock_tier])
 
+	_refresh_banner()
 	var keep_scroll := _scroll.scroll_vertical
 	for child in _grid.get_children():
 		_grid.remove_child(child)
 		child.queue_free()
 	match _tab:
-		Tab.FISH:
-			_fill_fish()
+		Tab.FRESH:
+			_fill_fish(false)
+		Tab.SALT:
+			_fill_fish(true)
 		Tab.EQUIPMENT:
 			_fill_equipment()
 		Tab.TANKS:
@@ -96,16 +119,32 @@ func refresh() -> void:
 	_scroll.set_deferred("scroll_vertical", keep_scroll)
 
 
-func _fill_fish() -> void:
-	var tank := game.current_tank()
-	var tank_is_marine: bool = tank.tank_type == TankController.TankType.SALTWATER
-	var list: Array = ShopManager.species_catalog.values()
-	## Fish that suit the tank you're looking at come first, cheapest first.
+func _refresh_banner() -> void:
+	_banner.visible = false
+	if _tab != Tab.FRESH and _tab != Tab.SALT:
+		return
+	var wants_salt: bool = _tab == Tab.SALT
+	var tank_is_salt: bool = game.current_tank().tank_type == TankController.TankType.SALTWATER
+	if wants_salt == tank_is_salt:
+		return
+	_banner.visible = true
+	var other := game.find_tank_of_type(wants_salt)
+	if other == -1:
+		_banner_label.text = Localization.t("shop_need_salt_tank")
+		_banner_button.text = Localization.t("shop_buy_salt_tank")
+		_banner_action = open_tab.bind(Tab.TANKS)
+	else:
+		_banner_label.text = Localization.t("shop_viewing_fresh" if wants_salt else "shop_viewing_salt")
+		_banner_button.text = Localization.t("shop_switch_tank")
+		_banner_action = game.select_tank.bind(other)
+
+
+func _fill_fish(saltwater: bool) -> void:
+	var list: Array = []
+	for species in ShopManager.species_catalog.values():
+		if species.is_marine == saltwater:
+			list.append(species)
 	list.sort_custom(func(a, b):
-		var a_fits: bool = a.is_marine == tank_is_marine
-		var b_fits: bool = b.is_marine == tank_is_marine
-		if a_fits != b_fits:
-			return a_fits
 		if a.unlock_tier != b.unlock_tier:
 			return a.unlock_tier < b.unlock_tier
 		if a.base_price != b.base_price:
@@ -113,14 +152,13 @@ func _fill_fish() -> void:
 		return a.id < b.id
 	)
 	for species in list:
-		var facts := Localization.t("shop_fish_facts", [
-			Localization.t("guide_stat_marine") if species.is_marine else Localization.t("guide_stat_freshwater"),
-			int(species.min_tank_liters), species.sell_price_adult,
-		])
+		var facts := Localization.t("shop_fish_facts", [int(species.min_tank_liters), species.sell_price_adult])
+		if species.fry_per_batch_max > 0:
+			facts += " · " + Localization.t("shop_fish_breeds")
 		var owned: int = game.count_fish(species.id, false) + game.count_fish(species.id, true)
 		var status := Localization.t("shop_owned", [owned]) if owned > 0 else ""
 		_add_card(
-			"res://assets/fish/%s.png" % species.id, Vector2(120.0, 76.0),
+			"res://assets/fish/%s.png" % species.id, Vector2(120.0, 84.0),
 			Localization.t("sp_%s" % species.id), facts, Localization.t("desc_sp_%s" % species.id),
 			status, game.fish_block_reason(species), species.base_price,
 			game.buy_fish.bind(species.id)
@@ -153,10 +191,12 @@ func _fill_tanks() -> void:
 	list.sort_custom(func(a, b): return a.price < b.price)
 	for preset in list:
 		var is_marine: bool = preset.tank_type == TankController.TankType.SALTWATER
+		var facts := Localization.t("shop_tank_facts", [
+			Localization.t("tank_type_salt") if is_marine else Localization.t("tank_type_fresh"), int(preset.tank_liters),
+		])
 		_add_card(
 			TankController.BACKGROUND[preset.tank_type], Vector2(140.0, 80.0),
-			Localization.t("tank_%s" % preset.id),
-			Localization.t("tank_type_salt") if is_marine else Localization.t("tank_type_fresh"),
+			Localization.t("tank_%s" % preset.id), facts,
 			Localization.t("desc_tank_%s" % preset.id),
 			"", game.tank_block_reason(preset), preset.price,
 			game.buy_tank.bind(preset.id)

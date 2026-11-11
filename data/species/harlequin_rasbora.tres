@@ -6,6 +6,8 @@
 script = ExtResource("1")
 id = "harlequin_rasbora"
 display_name = "Harlequin Rasbora"
+scientific_name = "Trigonostigma heteromorpha"
+swim_style = "darter"
 description = "A tight-schooling soft-water fish with a copper body and a dark wedge patch. Scatters eggs under broad leaves rather than giving live birth."
 archetype_id = "schooler"
 palette_color = Color(0.85, 0.5, 0.25, 1)

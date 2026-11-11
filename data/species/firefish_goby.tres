@@ -1,0 +1,40 @@
+[gd_resource type="Resource" script_class="FishSpeciesData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/resources/FishSpeciesData.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "firefish_goby"
+display_name = "Firefish Goby"
+scientific_name = "Nemateleotris magnifica"
+swim_style = "hoverer"
+archetype_id = "schooler"
+palette_color = Color(0.95, 0.4, 0.2, 1)
+temp_min_c = 22.0
+temp_max_c = 27.0
+ph_min = 7.9
+ph_max = 8.4
+min_tank_liters = 60.0
+is_marine = true
+diet_type = 2
+bioload_factor = 0.3
+temperament = 0
+compatibility_tags = Array[String](["goby"])
+schooling_min_group = 1
+disease_resistance = 0.5
+max_size_cm = 8.0
+growth_rate_cm_per_sim_day = 0.04
+maturity_age_sim_days = 120.0
+lifespan_sim_days = 1500.0
+is_livebearer = false
+pair_required = false
+breeding_cooldown_sim_days = 0.0
+fry_per_batch_min = 0
+fry_per_batch_max = 0
+egg_incubation_sim_days = 0.0
+base_price = 25
+sell_price_adult = 16
+sell_price_fry = 0
+rarity_tier = 2
+unlock_tier = 2
+source_note = "Gameplay values; see data/generate_species.py for how ranges were chosen."

@@ -6,6 +6,8 @@
 script = ExtResource("1")
 id = "neon_tetra"
 display_name = "Neon Tetra"
+scientific_name = "Paracheirodon innesi"
+swim_style = "darter"
 description = "A small, vividly striped schooling fish. Looks best — and feels calmest — in a group of six or more."
 archetype_id = "schooler"
 palette_color = Color(0.2, 0.45, 0.95, 1)

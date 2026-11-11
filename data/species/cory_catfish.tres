@@ -6,6 +6,8 @@
 script = ExtResource("1")
 id = "cory_catfish"
 display_name = "Cory Catfish"
+scientific_name = "Corydoras paleatus"
+swim_style = "bottom"
 description = "A peaceful, armored bottom-dweller that scavenges leftover food. Happiest in a group of its own kind and lays eggs it sticks to the glass."
 archetype_id = "bottom_dweller"
 palette_color = Color(0.55, 0.42, 0.3, 1)

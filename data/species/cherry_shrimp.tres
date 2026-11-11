@@ -6,6 +6,8 @@
 script = ExtResource("1")
 id = "cherry_shrimp"
 display_name = "Cherry Shrimp"
+scientific_name = "Neocaridina davidi"
+swim_style = "crawler"
 description = "A tiny, hardy, prolifically breeding freshwater shrimp. A great second income source alongside guppies."
 archetype_id = "invertebrate"
 palette_color = Color(0.75, 0.1, 0.1, 1)

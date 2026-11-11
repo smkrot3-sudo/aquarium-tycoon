@@ -6,6 +6,8 @@
 script = ExtResource("1")
 id = "molly"
 display_name = "Molly"
+scientific_name = "Poecilia sphenops"
+swim_style = "cruiser"
 description = "A larger, hardier livebearer that wants more swimming room and harder water than a guppy — a natural tank-upgrade fish."
 archetype_id = "livebearer"
 palette_color = Color(0.92, 0.92, 0.95, 1)

@@ -1,0 +1,40 @@
+[gd_resource type="Resource" script_class="FishSpeciesData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/resources/FishSpeciesData.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "tiger_barb"
+display_name = "Tiger Barb"
+scientific_name = "Puntigrus tetrazona"
+swim_style = "darter"
+archetype_id = "schooler"
+palette_color = Color(0.9, 0.7, 0.25, 1)
+temp_min_c = 22.0
+temp_max_c = 27.0
+ph_min = 6.0
+ph_max = 7.5
+min_tank_liters = 100.0
+is_marine = false
+diet_type = 1
+bioload_factor = 0.6
+temperament = 1
+compatibility_tags = Array[String](["schooling", "fin_nipper"])
+schooling_min_group = 6
+disease_resistance = 0.6
+max_size_cm = 7.0
+growth_rate_cm_per_sim_day = 0.04
+maturity_age_sim_days = 80.0
+lifespan_sim_days = 2000.0
+is_livebearer = false
+pair_required = false
+breeding_cooldown_sim_days = 18.0
+fry_per_batch_min = 15
+fry_per_batch_max = 40
+egg_incubation_sim_days = 1.5
+base_price = 5
+sell_price_adult = 4
+sell_price_fry = 1
+rarity_tier = 1
+unlock_tier = 1
+source_note = "Gameplay values; see data/generate_species.py for how ranges were chosen."

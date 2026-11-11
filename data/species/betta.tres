@@ -6,6 +6,8 @@
 script = ExtResource("1")
 id = "betta"
 display_name = "Betta"
+scientific_name = "Betta splendens"
+swim_style = "hoverer"
 description = "A flamboyant, aggressive, solitary fish. Beautiful, but incompatible with most tankmates — keep it alone."
 archetype_id = "labyrinth"
 palette_color = Color(0.65, 0.1, 0.5, 1)

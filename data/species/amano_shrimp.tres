@@ -1,0 +1,40 @@
+[gd_resource type="Resource" script_class="FishSpeciesData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/resources/FishSpeciesData.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "amano_shrimp"
+display_name = "Amano Shrimp"
+scientific_name = "Caridina multidentata"
+swim_style = "crawler"
+archetype_id = "invertebrate"
+palette_color = Color(0.6, 0.7, 0.6, 1)
+temp_min_c = 18.0
+temp_max_c = 28.0
+ph_min = 6.5
+ph_max = 7.5
+min_tank_liters = 40.0
+is_marine = false
+diet_type = 3
+bioload_factor = 0.15
+temperament = 0
+compatibility_tags = Array[String](["shrimp"])
+schooling_min_group = 1
+disease_resistance = 0.7
+max_size_cm = 5.0
+growth_rate_cm_per_sim_day = 0.04
+maturity_age_sim_days = 120.0
+lifespan_sim_days = 1000.0
+is_livebearer = false
+pair_required = false
+breeding_cooldown_sim_days = 0.0
+fry_per_batch_min = 0
+fry_per_batch_max = 0
+egg_incubation_sim_days = 0.0
+base_price = 5
+sell_price_adult = 3
+sell_price_fry = 0
+rarity_tier = 1
+unlock_tier = 1
+source_note = "Gameplay values; see data/generate_species.py for how ranges were chosen."

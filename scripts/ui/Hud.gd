@@ -168,8 +168,8 @@ func refresh() -> void:
 	_water_label.text = Localization.t("hud_water", [Localization.t(water_key)])
 	_water_dot.color = water_color
 
-	var other_locked: bool = game.tanks()[(game.current_tank_index() + 1) % game.tanks().size()].locked
-	UiKit.set_action_text(_tank_button, Localization.t("hud_tank_add") if other_locked else Localization.t("hud_tank_n", [game.current_tank_index() + 1]))
+	var owned := game.owned_tank_count()
+	UiKit.set_action_text(_tank_button, Localization.t("hud_tank_add") if owned <= 1 else Localization.t("hud_tank_n_of", [game.current_tank_index() + 1, owned]))
 
 	UiKit.set_button_kind(_feed_button, "primary" if tank.hungry_fish_count() > 0 else "secondary")
 	UiKit.set_button_kind(_water_button, "primary" if water_key == "water_poor" else "secondary")
