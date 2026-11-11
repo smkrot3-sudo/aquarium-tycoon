@@ -273,6 +273,7 @@ const S := {
 	"sell_tank_last": ["You can't sell your only tank.", "אי אפשר למכור את האקווריום היחיד שלך."],
 	"sell_tank_not_empty": ["Move or sell the fish first.", "קודם העבר או מכור את הדגים."],
 	"toast_tank_sold": ["Tank sold for $%d", "האקווריום נמכר ב-$%d"],
+	"update_browser_opened": ["The download opened in your browser. When it finishes, tap the file to install.", "ההורדה נפתחה בדפדפן. בסיום, לחץ על הקובץ כדי להתקין."],
 	"advice_ok": ["Everything looks fine. The graph shows nitrate, which creeps up slowly and needs a water change every few days.", "הכול נראה טוב. הגרף מראה את הניטרט, שעולה לאט ודורש החלפת מים כל כמה ימים."],
 }
 

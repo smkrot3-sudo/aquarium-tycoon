@@ -1137,10 +1137,13 @@ func advance_update() -> void:
 		UpdateState.IDLE:
 			check_for_update()
 		UpdateState.AVAILABLE:
-			update_state = UpdateState.DOWNLOADING
-			update_status_text = Localization.t("update_downloading", [0])
+			## The phone's own browser downloads and installs it. Downloading inside the game and
+			## handing a raw file path to the installer crashed some devices (Android refuses
+			## file:// paths) and stalled on weak connections; the browser resumes and is reliable.
+			ErrorLog.crumb("update: open browser")
+			OS.shell_open(UpdateChecker.download_url())
+			update_status_text = Localization.t("update_browser_opened")
 			update_status_changed.emit()
-			UpdateChecker.start_download()
 		UpdateState.READY_TO_INSTALL:
 			UpdateChecker.install_downloaded_update()
 

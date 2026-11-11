@@ -15,9 +15,9 @@ dest_files=["res://.godot/imported/clownfish.png-4f2bd1fb5005b60d41caf7cf4365cac
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
-compress/lossy_quality=0.7
+compress/lossy_quality=0.8
 compress/uastc_level=0
 compress/rdo_quality_loss=0.0
 compress/hdr_compression=1
