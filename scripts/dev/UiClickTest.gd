@@ -125,6 +125,7 @@ func _ready() -> void:
 		fish.hunger = 10.0
 		fish.is_sick = false
 	await _frames(30)
+	_main.hud.refresh()
 	await _tap_node(_main.hud._tip_button)
 	_check("Tapping the coach line performs its action (feed)", tank.get_fish()[0].hunger > 40.0)
 
@@ -139,8 +140,7 @@ func _ready() -> void:
 
 	await _tap_icon(_main.hud, "clipboard")
 	_check("The business button opens the business panel", _main.business.visible)
-	if not _main.business.visible:
-		await _tap_text("הזמנות")
+	await _tap_text("הזמנות")
 	_check("The Orders tab opens", _main.business._tab == BusinessPanel.Tab.ORDERS)
 	await _tap_text("אוסף")
 	_check("The Collection tab opens", _main.business._tab == BusinessPanel.Tab.COLLECTION)
@@ -359,8 +359,30 @@ func _tap_icon(root: Node, kind: String) -> void:
 	await _tap_node(button)
 
 
+## One synthetic tap. The engine only lets a button start a press while it believes the pointer
+## is hovering it, and re-checks hover against the REAL OS cursor whenever a layout changes (a
+## caption edit is enough) — so a synthetic press that lands a few frames after its pointer-move
+## can be silently ignored. Moving and pressing in the same frame avoids that; if a tap is still
+## swallowed it is repeated once, which a real finger would do too.
 func _tap_node(control: Control) -> void:
+	for attempt in range(2):
+		var fired := [false]
+		if not is_instance_valid(control):
+			return
+		if control is Button:
+			(control as Button).pressed.connect(func(): fired[0] = true, CONNECT_ONE_SHOT)
+		await _tap_node_once(control)
+		if not (is_instance_valid(control) and control is Button) or fired[0]:
+			return
+		print("  (info) tap swallowed on '%s', repeating" % _button_text(control))
+
+
+func _tap_node_once(control: Control) -> void:
 	var point: Vector2 = control.get_global_rect().get_center()
+	var move := InputEventMouseMotion.new()
+	move.position = point
+	move.global_position = point
+	get_viewport().push_input(move, true)
 	for pressed in [true, false]:
 		var event := InputEventMouseButton.new()
 		event.button_index = MOUSE_BUTTON_LEFT
