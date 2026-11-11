@@ -66,9 +66,7 @@ func current_tank_index() -> int:
 
 
 func _ready() -> void:
-	var had_save := SaveManager.has_save()
-	if had_save:
-		SaveManager.load_game()
+	var had_save := SaveManager.has_save() and SaveManager.load_game()
 	_show_welcome_on_start = not had_save
 	_needs_setup = not had_save
 	EconomyManager.apply_mode()
@@ -102,6 +100,8 @@ func _ready() -> void:
 	UpdateChecker.download_completed.connect(_on_update_download_completed)
 	UpdateChecker.download_failed.connect(_on_update_download_failed)
 
+	## From here on the game state is real (loaded, or deliberately new), so saving is safe.
+	SaveManager.saving_enabled = true
 	_build_ui()
 	_check_bailout()
 	_select_tank(0 if not _tanks[0].locked else 1)
@@ -177,11 +177,13 @@ func show_home() -> void:
 
 
 func go_home() -> void:
+	ErrorLog.crumb("go_home")
 	SaveManager.save_game()
 	show_home()
 
 
 func start_game() -> void:
+	ErrorLog.crumb("start_game")
 	if _needs_setup:
 		new_game.open()
 		return
@@ -203,6 +205,7 @@ func close_panels() -> void:
 ## Tapping a fish directly in the tank (TankController._unhandled_input) opens this card —
 ## does NOT pause or leave the tank, so the player can keep tapping around while it's up.
 func open_fish_detail(fish: FishController) -> void:
+	ErrorLog.crumb("open_fish_detail")
 	for panel in _all_panels():
 		if panel != fish_detail and panel != null and panel.visible:
 			panel.close()
@@ -213,6 +216,7 @@ func open_fish_detail(fish: FishController) -> void:
 ## Sells exactly this fish (the detail card's sell button) rather than "the least healthy one
 ## of this species" (sell_one_of) — the player can now tell them apart, so let them choose.
 func sell_specific_fish(fish: FishController) -> int:
+	ErrorLog.crumb("sell_specific_fish")
 	var value := current_tank().sell_fish(fish)
 	AudioManager.play("cash")
 	toast(Localization.t("toast_sold", [fish.fish_name, value]), "good")
@@ -223,6 +227,7 @@ func sell_specific_fish(fish: FishController) -> int:
 ## The new-game screen's Start button: fixes the mode and difficulty, sets the starting cash and
 ## carries on into the game.
 func begin_new_game(mode: int, difficulty: int) -> void:
+	ErrorLog.crumb("begin_new_game")
 	GameState.mode = mode
 	GameState.difficulty = difficulty
 	EconomyManager.cash = GameState.start_cash()
@@ -237,6 +242,7 @@ func begin_new_game(mode: int, difficulty: int) -> void:
 
 ## tab < 0 = the fish tab that matches the tank on screen.
 func open_shop(tab: int = -1) -> void:
+	ErrorLog.crumb("open_shop" + " " + str(tab))
 	close_panels()
 	if tab < 0:
 		tab = ShopPanel.Tab.SALT if current_tank().tank_type == TankController.TankType.SALTWATER else ShopPanel.Tab.FRESH
@@ -244,36 +250,43 @@ func open_shop(tab: int = -1) -> void:
 
 
 func open_fish_panel() -> void:
+	ErrorLog.crumb("open_fish_panel")
 	close_panels()
 	fish_panel.open()
 
 
 func open_tank_panel() -> void:
+	ErrorLog.crumb("open_tank_panel")
 	close_panels()
 	tank_panel.open()
 
 
 func open_guide() -> void:
+	ErrorLog.crumb("open_guide")
 	close_panels()
 	guide.open()
 
 
 func open_business(tab: int = 0) -> void:
+	ErrorLog.crumb("open_business" + " " + str(tab))
 	close_panels()
 	business.open_tab(tab)
 
 
 func open_stats() -> void:
+	ErrorLog.crumb("open_stats")
 	close_panels()
 	stats.open()
 
 
 func open_advisor() -> void:
+	ErrorLog.crumb("open_advisor")
 	close_panels()
 	advisor.open()
 
 
 func open_settings() -> void:
+	ErrorLog.crumb("open_settings")
 	close_panels()
 	settings.open()
 
@@ -294,6 +307,7 @@ func _on_select_tank(index: int) -> void:
 
 
 func select_tank(index: int) -> void:
+	ErrorLog.crumb("select_tank" + " " + str(index))
 	if index < 0 or index >= _tanks.size() or _tanks[index].locked:
 		return
 	_select_tank(index)
@@ -308,6 +322,7 @@ func _select_tank(index: int) -> void:
 
 ## HUD tank button: on to the next owned tank, or straight to the tank shop if there's only one.
 func cycle_tank() -> void:
+	ErrorLog.crumb("cycle_tank")
 	for step in range(1, _tanks.size()):
 		var index := (_current_tank_index + step) % _tanks.size()
 		if not _tanks[index].locked:
@@ -361,6 +376,7 @@ func _on_buy_tank(preset_id: String) -> void:
 
 
 func buy_tank(preset_id: String) -> bool:
+	ErrorLog.crumb("buy_tank" + " " + str(preset_id))
 	var preset := ShopManager.get_tank_preset(preset_id)
 	if preset == null:
 		return false
@@ -418,6 +434,7 @@ func _on_buy_equipment(equipment_id: String) -> void:
 
 
 func buy_equipment(equipment_id: String) -> bool:
+	ErrorLog.crumb("buy_equipment" + " " + str(equipment_id))
 	var equipment := ShopManager.get_equipment(equipment_id)
 	if equipment == null:
 		return false
@@ -497,6 +514,7 @@ func _on_buy_fish(species_id: String) -> void:
 ## `sex`: FishController.Sex.MALE/FEMALE to buy a specific one (the shop's ♂/♀ toggle), or -1
 ## for a random one (dev tools, and anything not written against the sex system).
 func buy_fish(species_id: String, sex: int = -1) -> bool:
+	ErrorLog.crumb("buy_fish" + " " + str(species_id))
 	var species := ShopManager.get_species(species_id)
 	if species == null:
 		return false
@@ -520,6 +538,7 @@ func buy_fish(species_id: String, sex: int = -1) -> bool:
 # ----------------------------------------------------------------------------------------
 
 func sell_one_of(species_id: String, fry: bool) -> bool:
+	ErrorLog.crumb("sell_one_of" + " " + str(species_id))
 	## Sell the least healthy one first — the player keeps their best breeders.
 	var pick: FishController = null
 	for fish in current_tank().get_fish():
@@ -536,6 +555,7 @@ func sell_one_of(species_id: String, fry: bool) -> bool:
 
 
 func sell_all_fry(species_id: String) -> int:
+	ErrorLog.crumb("sell_all_fry")
 	var total := 0
 	for fish in current_tank().get_fish():
 		if fish.species.id == species_id and fish.is_fry:
@@ -568,6 +588,7 @@ func _on_feed() -> void:
 
 ## `force` skips the "they're not hungry" guard (dev tools feed on a fixed schedule).
 func feed(force: bool = false) -> bool:
+	ErrorLog.crumb("feed")
 	var tank := current_tank()
 	var fish_list := tank.get_fish()
 	if fish_list.is_empty():
@@ -595,6 +616,7 @@ func _on_water_change() -> void:
 
 
 func water_change() -> void:
+	ErrorLog.crumb("water_change")
 	current_tank().perform_water_change(0.25)
 	Progress.bump("water_changes")
 	AudioManager.play("splash")
@@ -612,6 +634,7 @@ func _on_treat_disease() -> void:
 
 
 func treat_disease() -> bool:
+	ErrorLog.crumb("treat_disease")
 	var tank := current_tank()
 	if tank.sick_fish_count() == 0:
 		toast(Localization.t("alert_no_sick_fish"), "info")
@@ -639,6 +662,7 @@ func _on_fast_forward() -> void:
 
 ## Wipes all progress back to a brand-new game (Settings -> New game).
 func reset_game() -> void:
+	ErrorLog.crumb("reset_game")
 	SaveManager.delete_save()
 	GameState.mode = GameState.Mode.CAREER
 	GameState.difficulty = GameState.Difficulty.NORMAL
@@ -740,6 +764,7 @@ static func _count_species(fish_list: Array, species: FishSpeciesData) -> int:
 # ----------------------------------------------------------------------------------------
 
 func set_tool(new_tool: int) -> void:
+	ErrorLog.crumb("set_tool" + " " + str(new_tool))
 	tool = new_tool
 	for tank in _tanks:
 		tank.tool = new_tool

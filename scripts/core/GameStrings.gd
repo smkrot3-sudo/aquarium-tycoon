@@ -213,6 +213,11 @@ const S := {
 	],
 	"settings_music": ["Music and ambience", "מוזיקה ואווירה"],
 	"settings_sfx": ["Sound effects", "צלילי פעולות"],
+	"settings_diag": ["Diagnostics", "אבחון"],
+	"settings_diag_show": ["Show log", "הצג יומן"],
+	"settings_diag_clear": ["Clear", "נקה"],
+	"settings_diag_empty": ["Nothing recorded.", "לא נרשם דבר."],
+	"settings_diag_crashed": ["The game closed unexpectedly last time. Tap Show log and send a screenshot.", "המשחק נסגר בפתאומיות בפעם הקודמת. לחץ על ״הצג יומן״ ושלח צילום מסך."],
 	"advice_ok": ["Everything looks fine. The graph shows nitrate, which creeps up slowly and needs a water change every few days.", "הכול נראה טוב. הגרף מראה את הניטרט, שעולה לאט ודורש החלפת מים כל כמה ימים."],
 }
 

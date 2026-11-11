@@ -25,6 +25,7 @@ window/handheld/orientation="sensor_landscape"
 
 [autoload]
 
+ErrorLog="*res://autoload/ErrorLog.gd"
 Localization="*res://autoload/Localization.gd"
 TimeManager="*res://autoload/TimeManager.gd"
 EconomyManager="*res://autoload/EconomyManager.gd"

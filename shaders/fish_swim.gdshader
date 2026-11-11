@@ -58,10 +58,12 @@ void fragment() {
 	// Breathing: the belly swells and relaxes a touch.
 	sample_uv.y = (sample_uv.y - 0.5) * (1.0 - breathe * 0.03 * sin(phase * 0.25)) + 0.5;
 
-	vec4 color = vec4(0.0);
-	if (sample_uv.x >= 0.0 && sample_uv.x <= 1.0 && sample_uv.y >= 0.0 && sample_uv.y <= 1.0) {
-		color = texture(TEXTURE, sample_uv);
-	}
+	// Sample UNCONDITIONALLY (clamped), then mask. A texture() call inside a non-uniform branch
+	// has undefined derivatives, so on phone GPUs the mipmap level picked along the quad's edge
+	// was garbage and drew a faint translucent rectangle around every fish.
+	vec4 color = texture(TEXTURE, clamp(sample_uv, vec2(0.0), vec2(1.0)));
+	float inside = step(0.0, sample_uv.x) * step(sample_uv.x, 1.0) * step(0.0, sample_uv.y) * step(sample_uv.y, 1.0);
+	color *= inside;
 	if (hue_shift != 0.0) {
 		color.rgb = rotate_hue(color.rgb, hue_shift);
 	}

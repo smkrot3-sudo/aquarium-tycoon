@@ -122,20 +122,26 @@ func _build_tip() -> void:
 func _build_tools(insets: Vector2) -> void:
 	var holder := VBoxContainer.new()
 	holder.layout_direction = Control.LAYOUT_DIRECTION_LTR
-	holder.add_theme_constant_override("separation", 8)
-	holder.set_anchors_and_offsets_preset(Control.PRESET_TOP_LEFT)
+	holder.add_theme_constant_override("separation", 6)
+	## Bottom-left corner, just above the bottom bar, out of the way of the water.
+	holder.anchor_left = 0.0
+	holder.anchor_right = 0.0
+	holder.anchor_top = 1.0
+	holder.anchor_bottom = 1.0
 	holder.offset_left = insets.x + 6.0
-	holder.offset_top = TankController.HUD_TOP_PX + 74.0
+	holder.offset_right = insets.x + 62.0
+	holder.offset_bottom = -(TankController.HUD_BOTTOM_PX + 10.0)
+	holder.offset_top = holder.offset_bottom - 4.0 * 48.0 - 3.0 * 6.0
 	holder.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(holder)
 	var defs := [
-		[TankController.Tool.HAND, UiKit.icon("hand", 34.0)],
-		[TankController.Tool.FOOD, UiKit.texture_icon("res://assets/food/food_flakes.png", Vector2(46.0, 30.0))],
-		[TankController.Tool.SCRAPER, UiKit.icon("scraper", 34.0)],
-		[TankController.Tool.VACUUM, UiKit.icon("vacuum", 34.0)],
+		[TankController.Tool.HAND, UiKit.icon("hand", 26.0)],
+		[TankController.Tool.FOOD, UiKit.texture_icon("res://assets/food/food_flakes.png", Vector2(34.0, 22.0))],
+		[TankController.Tool.SCRAPER, UiKit.icon("scraper", 26.0)],
+		[TankController.Tool.VACUUM, UiKit.icon("vacuum", 26.0)],
 	]
 	for def in defs:
-		var b := UiKit.action_button("", def[1], "glass", false, Vector2(68.0, 62.0))
+		var b := UiKit.action_button("", def[1], "glass", false, Vector2(56.0, 48.0))
 		b.pressed.connect(game.set_tool.bind(def[0]))
 		holder.add_child(b)
 		_tool_buttons.append(b)

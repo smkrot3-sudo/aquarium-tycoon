@@ -6,7 +6,15 @@ extends Node
 const SCHEMA_VERSION := 1
 const SAVE_DIR := "user://saves/"
 const SAVE_PATH := SAVE_DIR + "slot_1.json"
+const TEMP_PATH := SAVE_DIR + "slot_1.tmp"
+const BACKUP_PATH := SAVE_DIR + "slot_1.bak"
+const CORRUPT_PATH := SAVE_DIR + "slot_1.corrupt"
 const AUTOSAVE_INTERVAL_SEC := 60.0
+
+## Nothing is written until the game has loaded (or decided there is nothing to load). A save
+## triggered by the app being paused or losing focus during start-up used to be able to
+## overwrite the real save with a blank new game.
+var saving_enabled: bool = false
 
 var _autosave_timer: Timer
 
@@ -26,15 +34,21 @@ func _notification(what: int) -> void:
 
 
 func delete_save() -> void:
-	if FileAccess.file_exists(SAVE_PATH):
-		DirAccess.remove_absolute(ProjectSettings.globalize_path(SAVE_PATH))
+	for path in [SAVE_PATH, TEMP_PATH, BACKUP_PATH, CORRUPT_PATH]:
+		if FileAccess.file_exists(path):
+			DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
 
 
 func has_save() -> bool:
-	return FileAccess.file_exists(SAVE_PATH)
+	return FileAccess.file_exists(SAVE_PATH) or FileAccess.file_exists(BACKUP_PATH)
 
 
+## Written to a temporary file first and only then moved over the real save, with the previous
+## good save kept as a backup: a crash or a kill in the middle of a write can no longer leave a
+## half-written save behind (which loaded as "nothing" and was then overwritten by a new game).
 func save_game() -> void:
+	if not saving_enabled:
+		return
 	var data := {
 		"schema_version": SCHEMA_VERSION,
 		"saved_at_unix": Time.get_unix_time_from_system(),
@@ -50,24 +64,57 @@ func save_game() -> void:
 		"tanks": _collect_tank_saves(),
 		"settings": {"volume": AudioManager.master_volume, "music_volume": AudioManager.music_volume, "sfx_volume": AudioManager.sfx_volume, "language": Localization.current_language},
 	}
-	var file := FileAccess.open(SAVE_PATH, FileAccess.WRITE)
+	var text := JSON.stringify(data)
+	var file := FileAccess.open(TEMP_PATH, FileAccess.WRITE)
 	if file == null:
-		push_error("SaveManager: failed to open %s for writing" % SAVE_PATH)
+		push_error("SaveManager: failed to open %s for writing" % TEMP_PATH)
 		return
-	file.store_string(JSON.stringify(data, "\t"))
+	file.store_string(text)
+	file.flush()
 	file.close()
+	## Only a temp file that reads back as a valid save may replace the current one.
+	if not _is_valid_save_file(TEMP_PATH):
+		push_error("SaveManager: the new save did not verify, keeping the old one")
+		return
+	if FileAccess.file_exists(SAVE_PATH):
+		## Never let a damaged current save replace a good backup.
+		if _is_valid_save_file(SAVE_PATH):
+			DirAccess.copy_absolute(ProjectSettings.globalize_path(SAVE_PATH), ProjectSettings.globalize_path(BACKUP_PATH))
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(SAVE_PATH))
+	var err := DirAccess.rename_absolute(ProjectSettings.globalize_path(TEMP_PATH), ProjectSettings.globalize_path(SAVE_PATH))
+	if err != OK:
+		push_error("SaveManager: could not move the new save into place (%s)" % error_string(err))
 
 
-func load_game() -> bool:
-	if not has_save():
-		return false
-	var file := FileAccess.open(SAVE_PATH, FileAccess.READ)
+static func _read_save_file(path: String) -> Variant:
+	if not FileAccess.file_exists(path):
+		return null
+	var file := FileAccess.open(path, FileAccess.READ)
 	if file == null:
-		return false
-	var parsed = JSON.parse_string(file.get_as_text())
+		return null
+	var text := file.get_as_text()
 	file.close()
-	if typeof(parsed) != TYPE_DICTIONARY:
-		push_error("SaveManager: corrupt save file")
+	if text.length() < 2:
+		return null
+	var parsed = JSON.parse_string(text)
+	return parsed if typeof(parsed) == TYPE_DICTIONARY else null
+
+
+static func _is_valid_save_file(path: String) -> bool:
+	var parsed = _read_save_file(path)
+	return parsed != null and parsed.has("economy") and parsed.has("tanks")
+
+
+## Loads the save, falling back to the backup if the main file is damaged. Returns false when
+## there is nothing usable (a damaged file is moved aside, not deleted).
+func load_game() -> bool:
+	var parsed = _read_save_file(SAVE_PATH)
+	if parsed == null:
+		if FileAccess.file_exists(SAVE_PATH):
+			push_error("SaveManager: the save file is damaged, trying the backup")
+			DirAccess.copy_absolute(ProjectSettings.globalize_path(SAVE_PATH), ProjectSettings.globalize_path(CORRUPT_PATH))
+		parsed = _read_save_file(BACKUP_PATH)
+	if parsed == null:
 		return false
 
 	var data: Dictionary = _migrate(parsed)

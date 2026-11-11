@@ -60,6 +60,9 @@ func _ready() -> void:
 			break
 	if a_guppy != null:
 		var guppy_name := a_guppy.fish_name
+		## Park it in open water so a HUD button or the edge of the tank can't be under the tap.
+		a_guppy.position = tank.get_swim_rect().get_center()
+		await _frames(2)
 		var event := InputEventMouseButton.new()
 		event.button_index = MOUSE_BUTTON_LEFT
 		event.position = a_guppy.position

@@ -3,8 +3,9 @@ extends Node
 ## separate Music and Effects volumes on top of the master one. Everything is generated in code
 ## (sine blips for the effects; filtered noise and soft chord pads for the ambience and music)
 ## rather than imported — consistent with the project's code-drawn-everything approach, and
-## there is nothing to source or license. The long loops are rendered on a worker thread right
-## after start-up so the game never stalls waiting for them.
+## there is nothing to source or license. The long loops are rendered a few milliseconds per frame
+## right after start-up (no worker thread, so nothing can race the main loop) and start playing
+## when they are ready.
 ##
 ## At night the music is muffled with a low-pass filter and turned down a little, so the tank
 ## "goes to sleep" with the in-game clock.
@@ -32,9 +33,11 @@ var _players: Array[AudioStreamPlayer] = []
 var _music_player: AudioStreamPlayer
 var _ambience_player: AudioStreamPlayer
 var _music_filter: AudioEffectLowPassFilter
-var _thread: Thread
 var _cancel: bool = false
 var _filter_timer: float = 0.0
+var _slice_start_usec: int = 0
+## Frame budget for the loop renderer: it gives the frame back after this long.
+const SLICE_USEC := 5000
 
 
 func _ready() -> void:
@@ -67,14 +70,11 @@ func _ready() -> void:
 	music_volume = music_volume
 	sfx_volume = sfx_volume
 
-	_thread = Thread.new()
-	_thread.start(_render_loops)
+	_render_loops.call_deferred()
 
 
 func _exit_tree() -> void:
 	_cancel = true
-	if _thread != null and _thread.is_started():
-		_thread.wait_to_finish()
 
 
 func _setup_buses() -> void:
@@ -169,17 +169,25 @@ static func _wrap_wav(data: PackedByteArray, rate: int, looping: bool) -> AudioS
 
 
 # ----------------------------------------------------------------------------------------
-# Ambience and music (rendered on a worker thread)
+# Ambience and music (rendered in small slices, a few milliseconds per frame)
 # ----------------------------------------------------------------------------------------
 
 func _render_loops() -> void:
-	var ambience := _render_ambience()
+	await get_tree().process_frame
+	var ambience: PackedByteArray = await _render_ambience()
 	if _cancel:
 		return
-	var music := _render_music()
+	var music: PackedByteArray = await _render_music()
 	if _cancel:
 		return
-	_start_loops.call_deferred(ambience, music)
+	_start_loops(ambience, music)
+
+
+## Hands the frame back to the game once this slice has used up its budget.
+func _slice() -> void:
+	if Time.get_ticks_usec() - _slice_start_usec > SLICE_USEC:
+		await get_tree().process_frame
+		_slice_start_usec = Time.get_ticks_usec()
 
 
 func _start_loops(ambience: PackedByteArray, music: PackedByteArray) -> void:
@@ -203,7 +211,10 @@ func _render_ambience() -> PackedByteArray:
 	rng.seed = 424242
 	var lp := 0.0
 	var lp2 := 0.0
+	_slice_start_usec = Time.get_ticks_usec()
 	for i in range(n + fade):
+		if i % 1024 == 0:
+			await _slice()
 		var white := rng.randf() * 2.0 - 1.0
 		lp += 0.05 * (white - lp)
 		lp2 += 0.04 * (lp - lp2)
@@ -214,6 +225,7 @@ func _render_ambience() -> PackedByteArray:
 		var length := int(rate * 0.09)
 		var f0 := rng.randf_range(350.0, 700.0)
 		var phase := 0.0
+		await _slice()
 		for j in range(length):
 			var tt := float(j) / float(length)
 			phase += TAU * f0 * (1.0 + 1.6 * tt) / rate
@@ -222,12 +234,14 @@ func _render_ambience() -> PackedByteArray:
 	var out := PackedFloat32Array()
 	out.resize(n)
 	for i in range(n):
+		if i % 4096 == 0:
+			await _slice()
 		if i < fade:
 			var w := float(i) / float(fade)
 			out[i] = raw[i] * w + raw[n + i] * (1.0 - w)
 		else:
 			out[i] = raw[i]
-	return _to_pcm16(out, 0.5)
+	return await _to_pcm16_sliced(out, 0.5)
 
 
 ## A 32-second loop: four slow chords (Am, F, C, G) of detuned sine pads, with a sparse plucked
@@ -253,6 +267,7 @@ func _render_music() -> PackedByteArray:
 
 	var segment := int(rate * (chord_seconds + 5.0))
 	var attack: float = rate * 2.5
+	_slice_start_usec = Time.get_ticks_usec()
 	for c in range(chords.size()):
 		if _cancel:
 			return PackedByteArray()
@@ -262,6 +277,8 @@ func _render_music() -> PackedByteArray:
 				var step: float = float(note) * float(detune) / rate * float(SINE_TABLE_SIZE)
 				var phase: float = rng.randf() * SINE_TABLE_SIZE
 				for i in range(segment):
+					if i % 2048 == 0:
+						await _slice()
 					var env: float = minf(1.0, minf(float(i) / attack, float(segment - i) / attack))
 					var idx := (offset + i) % total
 					if idx < 0:
@@ -278,20 +295,25 @@ func _render_music() -> PackedByteArray:
 		var start := int(float(k) * 0.75 * rate)
 		var step: float = freq / rate * float(SINE_TABLE_SIZE)
 		var phase := 0.0
+		await _slice()
 		for i in range(pluck_len):
 			var env := exp(-4.2 * float(i) / float(pluck_len))
 			mix[(start + i) % total] += table[int(phase) & (SINE_TABLE_SIZE - 1)] * env * 0.07
 			phase += step
-	return _to_pcm16(mix, 0.42)
+	return await _to_pcm16_sliced(mix, 0.42)
 
 
-static func _to_pcm16(samples: PackedFloat32Array, peak: float) -> PackedByteArray:
+func _to_pcm16_sliced(samples: PackedFloat32Array, peak: float) -> PackedByteArray:
 	var biggest := 0.0001
-	for v in samples:
-		biggest = maxf(biggest, absf(v))
+	for i in range(samples.size()):
+		if i % 8192 == 0:
+			await _slice()
+		biggest = maxf(biggest, absf(samples[i]))
 	var gain := peak / biggest
 	var data := PackedByteArray()
 	data.resize(samples.size() * 2)
 	for i in range(samples.size()):
+		if i % 8192 == 0:
+			await _slice()
 		data.encode_s16(i * 2, clampi(int(samples[i] * gain * 32767.0), -32768, 32767))
 	return data

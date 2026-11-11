@@ -43,6 +43,28 @@ func _build() -> void:
 	_update_status.custom_minimum_size = Vector2(240.0, 0.0)
 	update_row.add_child(_update_status)
 
+	# --- diagnostics: what the game recorded about errors and the last actions
+	var diag_row := _section(list, Localization.t("settings_diag"))
+	var diag_text := UiKit.paragraph("", UiKit.FONT_SMALL, UiKit.COL_MUTED)
+	diag_text.visible = false
+	diag_row.get_parent().add_child(diag_text)
+	var show_log := UiKit.button(Localization.t("settings_diag_show"), "secondary", 56.0, UiKit.FONT_BODY)
+	show_log.pressed.connect(func():
+		diag_text.visible = not diag_text.visible
+		if diag_text.visible:
+			var report: String = ErrorLog.report()
+			diag_text.text = report if report != "" else Localization.t("settings_diag_empty")
+	)
+	diag_row.add_child(show_log)
+	var clear_log := UiKit.button(Localization.t("settings_diag_clear"), "tab", 56.0, UiKit.FONT_BODY)
+	clear_log.pressed.connect(func():
+		ErrorLog.clear()
+		diag_text.text = Localization.t("settings_diag_empty")
+	)
+	diag_row.add_child(clear_log)
+	if ErrorLog.last_run_crashed:
+		diag_row.add_child(UiKit.paragraph(Localization.t("settings_diag_crashed"), UiKit.FONT_SMALL, UiKit.COL_WARN))
+
 	# --- game
 	_reset_row = _section(list, Localization.t("settings_game"))
 	var home_button := UiKit.action_button(Localization.t("settings_to_home"), UiKit.icon("home", 28.0), "secondary", false, Vector2(0.0, 64.0), UiKit.FONT_BUTTON)

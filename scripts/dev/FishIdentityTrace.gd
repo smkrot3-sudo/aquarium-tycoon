@@ -37,6 +37,8 @@ func _ready() -> void:
 	for day in range(12):
 		TimeManager.debug_fast_forward_days(1.0)
 		main.feed(true)
+		if day % 3 == 2:
+			main.water_change()
 	_check("A male+female pair breeds", tank.get_fish().size() > 2)
 
 	# --- every fish got a distinct name, and the sexes it asked for
