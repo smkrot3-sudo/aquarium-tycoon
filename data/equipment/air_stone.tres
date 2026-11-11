@@ -8,5 +8,5 @@ id = "air_stone"
 display_name = "Air Stone"
 slot = 3
 price = 6
-unlock_tier = 0
+unlock_tier = 3
 oxygen_boost = 2.0

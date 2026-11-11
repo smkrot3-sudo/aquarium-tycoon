@@ -159,6 +159,30 @@ func _ready() -> void:
 	await _settle(10)
 	await _shot("21_third_tank")
 
+	GameState.mode = GameState.Mode.SANDBOX
+	EconomyManager.apply_mode()
+	for id in ["tank_25", "tank_60", "huge_freshwater_tank", "tank_450", "marine_120"]:
+		_main.buy_tank(id)
+		if id != "marine_120":
+			_main.buy_equipment("basic_light")
+			_main.buy_equipment("basic_filter")
+			for species_id in ["guppy", "platy", "neon_tetra", "angelfish", "goldfish", "oscar"]:
+				_main.buy_fish(species_id, FishController.Sex.MALE)
+				_main.buy_fish(species_id, FishController.Sex.FEMALE)
+	_main.room.set_zoom(RoomView.Zoom.OVERVIEW)
+	await _settle(90)
+	await _shot("24_room_overview")
+	_main.select_tank(3)
+	_main.room.set_zoom(RoomView.Zoom.FOCUS)
+	await _settle(90)
+	await _shot("25_big_tank_focus")
+	_main.room.set_zoom(RoomView.Zoom.CLOSE)
+	await _settle(90)
+	await _shot("26_big_tank_close")
+	_main.select_tank(1)
+	_main.room.set_zoom(RoomView.Zoom.FOCUS)
+	await _settle(90)
+	await _shot("27_small_tank_focus")
 	Localization.set_language("en")
 	await _settle(20)
 	await _shot("22_english_hud")

@@ -8,6 +8,6 @@ id = "protein_skimmer"
 display_name = "Protein Skimmer"
 slot = 1
 price = 65
-unlock_tier = 2
+unlock_tier = 28
 filter_flow_liters_per_hour = 250.0
 filter_bio_capacity = 2.0

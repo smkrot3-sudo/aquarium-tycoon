@@ -8,5 +8,5 @@ id = "digital_test_kit"
 display_name = "Digital Test Kit"
 slot = 5
 price = 10
-unlock_tier = 0
+unlock_tier = 2
 reveals_exact_readings = true

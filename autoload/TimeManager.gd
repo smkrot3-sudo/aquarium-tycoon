@@ -16,7 +16,9 @@ signal speed_changed
 ## The player's speed button cycles 1x -> 2x -> 4x -> paused -> 1x.
 const SPEEDS := [1.0, 2.0, 4.0]
 
-var sim_minutes_total: float = 0.0
+## A game starts at 8 in the morning (midnight would greet the player with a dark room).
+const START_MINUTES := 8.0 * 60.0
+var sim_minutes_total: float = START_MINUTES
 var _minutes_accum_since_last_tick: float = 0.0
 var current_season: Season = Season.SPRING
 var paused: bool = false                    ## set by the home screen (the game isn't being played)

@@ -43,5 +43,5 @@ base_price = 35
 sell_price_adult = 20
 sell_price_fry = 3
 rarity_tier = 1
-unlock_tier = 2
+unlock_tier = 28
 source_note = "DRAFT placeholder ranges. Verify against Seriously Fish / Aquarium Co-Op before shipping real data."

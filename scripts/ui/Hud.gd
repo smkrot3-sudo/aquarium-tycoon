@@ -15,6 +15,8 @@ var _day_label: Label
 var _water_label: Label
 var _water_dot: UiIcon
 var _fish_label: Label
+var _level_label: Label
+var _level_bar: ProgressBar
 var _tank_button: Button
 var _tip_button: Button
 var _tip_action: Callable
@@ -62,8 +64,15 @@ func _build_top_bar(insets: Vector2) -> void:
 	cash_chip.get_meta("row").add_child(_cash_label)
 	row.add_child(cash_chip)
 
+	var level_chip := UiKit.chip(60.0)
+	_level_label = UiKit.label("", UiKit.FONT_SMALL, UiKit.COL_ACCENT, true)
+	level_chip.get_meta("row").add_child(_level_label)
+	_level_bar = UiKit.progress(0.0, UiKit.COL_ACCENT, Vector2(34.0, 10.0))
+	level_chip.get_meta("row").add_child(_level_bar)
+	row.add_child(level_chip)
+
 	var day_chip := UiKit.chip(60.0)
-	_day_label = UiKit.label("", UiKit.FONT_BODY)
+	_day_label = UiKit.label("", UiKit.FONT_SMALL)
 	day_chip.get_meta("row").add_child(_day_label)
 	row.add_child(day_chip)
 
@@ -74,7 +83,7 @@ func _build_top_bar(insets: Vector2) -> void:
 	var water_chip := UiKit.chip(60.0)
 	_water_dot = UiKit.icon("dot", 22.0, UiKit.COL_GOOD)
 	water_chip.get_meta("row").add_child(_water_dot)
-	_water_label = UiKit.label("", UiKit.FONT_BODY)
+	_water_label = UiKit.label("", UiKit.FONT_SMALL)
 	water_chip.get_meta("row").add_child(_water_label)
 	row.add_child(water_chip)
 
@@ -86,11 +95,15 @@ func _build_top_bar(insets: Vector2) -> void:
 
 	row.add_child(UiKit.spacer())
 
+	var zoom_button := UiKit.action_button("", UiKit.icon("zoom", 30.0), "glass", false, Vector2(56.0, 60.0))
+	zoom_button.pressed.connect(game.cycle_zoom)
+	row.add_child(zoom_button)
+
 	_business_button = UiKit.action_button("0", UiKit.icon("clipboard", 30.0), "glass", false, Vector2(0.0, 60.0), UiKit.FONT_BODY)
 	_business_button.pressed.connect(func(): game.open_business())
 	row.add_child(_business_button)
 
-	_tank_button = UiKit.action_button(Localization.t("hud_tank_n", [1]), UiKit.icon("tank", 30.0), "glass", false, Vector2(0.0, 60.0), UiKit.FONT_BODY)
+	_tank_button = UiKit.action_button("1/1", UiKit.icon("tank", 30.0), "glass", false, Vector2(0.0, 60.0), UiKit.FONT_BODY)
 	_tank_button.pressed.connect(game.cycle_tank)
 	row.add_child(_tank_button)
 
@@ -235,6 +248,8 @@ func refresh() -> void:
 	if game.tool != TankController.Tool.HAND:
 		_tool_hint_label.text = Localization.t(["", "tool_hint_food", "tool_hint_scraper", "tool_hint_vacuum"][game.tool])
 	_cash_label.text = "$%d" % EconomyManager.cash
+	_level_label.text = Localization.t("hud_level", [EconomyManager.unlock_tier])
+	_level_bar.value = Levels.level_fraction(EconomyManager.xp())
 	_day_label.text = Localization.t("hud_day", [TimeManager.current_day() + 1, Localization.t("season_%d" % TimeManager.current_season)])
 	_fish_label.text = str(tank.get_fish().size())
 
@@ -248,11 +263,15 @@ func refresh() -> void:
 	elif neglect >= 0.3:
 		water_key = "water_fair"
 		water_color = UiKit.COL_WARN
-	_water_label.text = Localization.t("hud_water", [Localization.t(water_key)])
+	_water_label.text = Localization.t(water_key)
 	_water_dot.color = water_color
 
 	var owned := game.owned_tank_count()
-	UiKit.set_action_text(_tank_button, Localization.t("hud_tank_add") if owned <= 1 else Localization.t("hud_tank_n_of", [game.current_tank_index() + 1, owned]))
+	var position_in_row := 1
+	for i in range(game.current_tank_index()):
+		if not game.tanks()[i].locked:
+			position_in_row += 1
+	UiKit.set_action_text(_tank_button, "+" if owned <= 1 else "%d/%d" % [position_in_row, owned])
 
 	UiKit.set_button_kind(_feed_button, "primary" if tank.hungry_fish_count() > 0 else "secondary")
 	UiKit.set_button_kind(_water_button, "primary" if water_key == "water_poor" else "secondary")

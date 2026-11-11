@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="TankPresetData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/resources/TankPresetData.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "tank_1000"
+display_name = "Public Aquarium Tank (1000L)"
+price = 8000
+unlock_tier = 48
+tank_liters = 1000.0
+tank_type = 0
+ambient_temp_base_c = 22.0

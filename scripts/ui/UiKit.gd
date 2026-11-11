@@ -260,7 +260,7 @@ static func panel(color: Color = COL_CARD, radius: int = 18, margin_h: float = 1
 
 ## Small translucent pill for HUD readouts. Returns the panel; add content to its "row" meta.
 static func chip(min_height: float = 56.0) -> PanelContainer:
-	var style := box(COL_GLASS, 28, 16.0, 6.0)
+	var style := box(COL_GLASS, 28, 12.0, 6.0)
 	style.set_border_width_all(2)
 	style.border_color = Color(1, 1, 1, 0.16)
 	var p := PanelContainer.new()

@@ -6,8 +6,8 @@
 script = ExtResource("1")
 id = "huge_freshwater_tank"
 display_name = "Show Freshwater Tank (200L)"
-price = 240
-unlock_tier = 3
+price = 800
+unlock_tier = 23
 tank_liters = 200.0
 tank_type = 0
 ambient_temp_base_c = 22.0

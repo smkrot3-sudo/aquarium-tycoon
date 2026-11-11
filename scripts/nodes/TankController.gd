@@ -3,11 +3,13 @@ class_name TankController
 ## Drives one tank's water-chemistry simulation and owns its fish as children. Registered
 ## with TankRegistry so TimeManager-driven ticks reach it. See plan "Core simulation model".
 ##
-## View: the tank fills the whole screen above the HUD's docked bottom bar. An illustrated
-## background (assets/backgrounds/<type>.jpg — sand, plants/corals at the edges, open water in
-## the middle) is cover-scaled into that area; on top of it sit a light shimmer overlay, the
-## installed equipment (so a purchase is visible in the water, not just a number), bubbles and
-## the fish. Everything is laid out in viewport pixels and rebuilt when the viewport resizes.
+## View: a real-sized glass tank standing in a room (see RoomView). The interior is laid out in
+## local pixels at PX_PER_CM from the tank's liters (a 15 L nano tank is about 500 px wide, a
+## 1000 L one about 2000 px), so bigger tanks genuinely look bigger and their fish smaller. An
+## illustrated background (sand, plants/corals at the edges, open water in the middle) is
+## crop-scaled to the interior; on top of it sit a light shimmer overlay, the installed equipment,
+## bubbles and the fish, and TankFrame2D draws the glass, rim, lid and stand around it. The room
+## scales and moves this whole node, so everything here works in local coordinates.
 
 const FISH_SCENE := preload("res://scenes/fish/Fish.tscn")
 const WATER_SHADER := preload("res://shaders/water_shimmer.gdshader")
@@ -33,16 +35,20 @@ const EQUIPMENT_SPRITE := {
 }
 
 ## Screen space the HUD keeps for itself (see scripts/ui/Hud.gd): a floating top bar and a
-## docked, opaque bottom action bar. Fish stay out of both.
+## docked, opaque bottom action bar. The room camera frames tanks between the two.
 const HUD_TOP_PX := 84.0
 const HUD_BOTTOM_PX := 100.0
+## Interior pixels per centimetre of real tank, and how far below the interior's top the water
+## surface sits (as a fraction of its height).
+const PX_PER_CM := 12.0
+const WATER_TOP_FRACTION := 0.05
 ## Fraction of the background art's height taken by the sand floor at the bottom.
 const SAND_FRACTION := 0.17
 ## Chemistry is integrated in 1-hour steps even when a bigger chunk of time arrives at once
 ## (debug fast-forward, offline catch-up) — one giant step would overshoot badly.
 const MAX_CHEMISTRY_SUBSTEPS := 240
 
-@export var tank_liters: float = 40.0
+@export var tank_liters: float = 15.0
 @export var ambient_temp_base_c: float = 22.0
 @export var tank_type: TankType = TankType.FRESHWATER
 ## Tanks beyond the player's first are purchased in-game (see GameController.buy_tank);
@@ -54,6 +60,8 @@ const MAX_CHEMISTRY_SUBSTEPS := 240
 @export var light_equipment: EquipmentData
 @export var air_stone: EquipmentData
 @export var has_test_kit: bool = false
+## What the player paid for this tank (selling it returns a part of that).
+var purchase_price: int = 0
 
 ## Set by GameController._ready(); lets a direct tap on a fish (_unhandled_input below) open its
 ## identity card. Never set in a dev tool that doesn't build the full UI — null-checked before use.
@@ -86,6 +94,7 @@ var _dim: Polygon2D
 var _equipment_layer: Node2D
 var _bubbles: BubbleEffect2D
 var _food_layer: Node2D
+var _frame: TankFrame2D
 var _food_bits: Array = []  ## [{node: Polygon2D, speed: float, phase: float, life: float}]
 
 ## Algae on the glass and mulm on the sand (see DirtOverlay2D); the player cleans them with tools.
@@ -98,8 +107,8 @@ var tool: int = Tool.HAND:
 var _tool_dragging: bool = false
 var _last_pinch_msec: int = 0
 
-## Recomputed by _rebuild_view(): the on-screen area the tank art fills.
-var _view_rect: Rect2 = Rect2(0.0, 0.0, 1152.0, 548.0)
+## Recomputed by _rebuild_view(): the interior (water) area in local pixels.
+var _view_rect: Rect2 = Rect2(0.0, 0.0, 500.0, 250.0)
 var _sand_top_y: float = 450.0
 
 ## species_id -> {pos: Vector2, time_left: float}; schooling fish steer around a shared point.
@@ -118,6 +127,10 @@ signal fish_born(species: FishSpeciesData, count: int)
 signal fish_died(species: FishSpeciesData, fish_name: String, reason: String)
 ## A cleaning stroke removed some algae (tool == SCRAPER) or mulm (tool == VACUUM).
 signal tool_cleaned(tool_kind: int, blobs: int)
+## The tank's size changed (bought, reset or loaded): the room has to lay everything out again.
+signal layout_changed
+## Adult fish ate some fry today (see _fry_predation); the game suggests a separate nursery tank.
+signal fry_eaten(count: int)
 
 
 func _ready() -> void:
@@ -128,15 +141,56 @@ func _ready() -> void:
 	if not locked:
 		TankRegistry.register_tank(self)
 	TimeManager.season_changed.connect(_on_season_changed)
+	visible = not locked
 	_rebuild_view()
-	get_viewport().size_changed.connect(_rebuild_view)
 
 
-## Rebuilds everything whose layout depends on the viewport size. Fish aren't repositioned —
-## they simply pick their next swim target inside the new bounds.
+# ----------------------------------------------------------------------------------------
+# Real-world size
+# ----------------------------------------------------------------------------------------
+
+## Length, height and depth in cm of a typical rectangular tank holding `liters`.
+static func dimensions_cm(liters: float) -> Vector3:
+	var k := pow(maxf(liters, 1.0) * 1000.0 / 2.88, 1.0 / 3.0)
+	return Vector3(2.4 * k, 1.2 * k, k)
+
+
+static func interior_size_for(liters: float) -> Vector2:
+	var d := dimensions_cm(liters)
+	return Vector2(d.x, d.y) * PX_PER_CM
+
+
+## Height of the cabinet or table the tank stands on, in px.
+static func stand_height_px(liters: float) -> float:
+	return lerpf(55.0, 85.0, clampf(liters / 1000.0, 0.0, 1.0)) * PX_PER_CM
+
+
+## Thickness of the glass rim around the water, and of the stand's top plate, in px.
+const RIM_PX := 14.0
+const PLATE_PX := 34.0
+## How far the stand reaches past each end of the tank.
+const STAND_OVERHANG_PX := 40.0
+
+
+## Local y of the floor the stand rests on (the room puts this at its own floor line).
+func floor_local_y() -> float:
+	return _view_rect.end.y + RIM_PX + PLATE_PX + stand_height_px(tank_liters)
+
+
+## Everything the tank occupies in the room (frame and stand included), in local pixels.
+func exterior_rect() -> Rect2:
+	var top := -RIM_PX - 52.0
+	return Rect2(-STAND_OVERHANG_PX - RIM_PX, top, _view_rect.size.x + 2.0 * (STAND_OVERHANG_PX + RIM_PX), floor_local_y() - top)
+
+
+func water_top_y() -> float:
+	return _view_rect.size.y * WATER_TOP_FRACTION
+
+
+## Rebuilds everything that depends on the tank's size. Fish aren't repositioned — they simply
+## pick their next swim target inside the new bounds.
 func _rebuild_view() -> void:
-	var vp := get_viewport_rect().size
-	_view_rect = Rect2(0.0, 0.0, vp.x, maxf(200.0, vp.y - HUD_BOTTOM_PX))
+	_view_rect = Rect2(Vector2.ZERO, interior_size_for(tank_liters))
 	_rebuild_background()
 	_rebuild_shimmer()
 	refresh_equipment_visuals()
@@ -147,6 +201,14 @@ func _rebuild_view() -> void:
 		_food_layer.z_index = 5
 		add_child(_food_layer)
 	_ensure_overlays()
+	if _frame == null:
+		_frame = TankFrame2D.new()
+		_frame.name = "Frame"
+		_frame.tank = self
+		_frame.z_index = 8
+		add_child(_frame)
+	_frame.queue_redraw()
+	layout_changed.emit()
 
 
 func _ensure_overlays() -> void:
@@ -162,8 +224,14 @@ func _ensure_overlays() -> void:
 		add_child(_mulm)
 		_mulm.setup(DirtOverlay2D.Kind.MULM, hash(String(name)) + 2)
 		_mulm.cursor_radius = 56.0
-	_algae.set_rect(Rect2(_view_rect.position.x, HUD_TOP_PX + 20.0, _view_rect.size.x, maxf(60.0, _sand_top_y - HUD_TOP_PX - 10.0)))
-	_mulm.set_rect(Rect2(_view_rect.position.x + _view_rect.size.x * 0.08, _sand_top_y + 8.0, _view_rect.size.x * 0.84, maxf(30.0, _view_rect.end.y - _sand_top_y - 18.0)))
+	var blob_scale: float = clampf(_view_rect.size.y / 548.0, 0.4, 1.2)
+	_algae.blob_scale = blob_scale
+	_mulm.blob_scale = blob_scale
+	_algae.cursor_radius = 64.0 * blob_scale
+	_mulm.cursor_radius = 56.0 * blob_scale
+	var water_top := water_top_y()
+	_algae.set_rect(Rect2(_view_rect.position.x, water_top, _view_rect.size.x, maxf(40.0, _sand_top_y - water_top)))
+	_mulm.set_rect(Rect2(_view_rect.position.x + _view_rect.size.x * 0.08, _sand_top_y + 6.0, _view_rect.size.x * 0.84, maxf(20.0, _view_rect.end.y - _sand_top_y - 14.0)))
 
 
 func algae_level() -> float:
@@ -174,11 +242,11 @@ func mulm_level() -> float:
 	return _mulm.level() if _mulm != null else 0.0
 
 
-## Open water where mid-water fish swim: clear of the top HUD, the side decor and the sand.
+## Open water where mid-water fish swim: below the surface, clear of the side decor and the sand.
 func get_swim_rect() -> Rect2:
 	var r := _view_rect
-	var top := HUD_TOP_PX + 36.0
-	return Rect2(r.position.x + r.size.x * 0.08, top, r.size.x * 0.84, maxf(60.0, _sand_top_y - 40.0 - top))
+	var top := water_top_y() + r.size.y * 0.08
+	return Rect2(r.position.x + r.size.x * 0.08, top, r.size.x * 0.84, maxf(40.0, _sand_top_y - r.size.y * 0.07 - top))
 
 
 ## Thin band just over the sand for bottom dwellers and shrimp.
@@ -210,7 +278,7 @@ func get_home_point(species: FishSpeciesData) -> Vector2:
 
 ## Roughly where the water surface is, for air-breathing fish (bettas, gouramis) to rise to.
 func get_surface_y() -> float:
-	return HUD_TOP_PX + 30.0
+	return water_top_y() + _view_rect.size.y * 0.05
 
 
 ## A single bubble released at the surface when an air-breather exhales.
@@ -230,53 +298,66 @@ static func _random_point(rect: Rect2) -> Vector2:
 func _unhandled_input(event: InputEvent) -> void:
 	if not visible:
 		return
-	var point: Vector2 = Vector2.ZERO
+	var screen_point: Vector2 = Vector2.ZERO
 	var phase := ""  ## "down", "up" or "move"
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
-		point = event.position
+		screen_point = event.position
 		phase = "down" if event.pressed else "up"
 	elif event is InputEventScreenTouch:
-		point = event.position
+		screen_point = event.position
 		phase = "down" if event.pressed else "up"
 	elif event is InputEventMouseMotion and _tool_dragging:
-		point = event.position
+		screen_point = event.position
 		phase = "move" if (event.button_mask & MOUSE_BUTTON_MASK_LEFT) != 0 else "up"
 	elif event is InputEventScreenDrag and _tool_dragging:
-		point = event.position
+		screen_point = event.position
 		phase = "move"
 	if phase == "":
 		return
 	if phase == "up":
 		_end_tool_drag()
 		return
+	## The room scales and moves this tank, so a screen position becomes a local one first.
+	var point: Vector2 = get_global_transform().affine_inverse() * screen_point
 	if phase == "down" and not _view_rect.has_point(point):
+		return
+
+	## A tank that isn't the one being looked at: tapping its water goes to it instead.
+	if game != null and phase == "down" and game.current_tank() != self:
+		game.focus_tank_from_room(self)
+		get_viewport().set_input_as_handled()
 		return
 
 	match tool:
 		Tool.FOOD:
 			if phase == "down":
 				_pinch_at(point)
+			get_viewport().set_input_as_handled()
 			return
 		Tool.SCRAPER, Tool.VACUUM:
 			if phase == "down":
 				_tool_dragging = true
 			_tool_stroke(point)
+			get_viewport().set_input_as_handled()
 			return
 	if phase != "down":
 		return
 
 	## A tap that lands ON a fish (within its own drawn size) opens its identity card instead of
-	## startling the tank — the closest one wins if a few overlap.
+	## startling the tank — the closest one wins if a few overlap. Zoomed out, the target never
+	## shrinks below a fingertip.
 	if game != null:
+		var screen_scale: float = maxf(0.05, absf(get_global_transform().get_scale().x))
 		var closest: FishController = null
 		var closest_dist := INF
 		for fish in get_fish():
 			var dist := fish.position.distance_to(point)
-			if dist < fish.tap_radius() and dist < closest_dist:
+			if dist < maxf(fish.tap_radius(), 28.0 / screen_scale) and dist < closest_dist:
 				closest = fish
 				closest_dist = dist
 		if closest != null:
 			game.open_fish_detail(closest)
+			get_viewport().set_input_as_handled()
 			return
 
 	for fish in get_fish():
@@ -373,11 +454,19 @@ func _rebuild_background() -> void:
 	sprite.texture = load(path)
 	sprite.centered = false
 	var tex_size: Vector2 = sprite.texture.get_size()
-	## Cover-scale, anchored to the bottom: on a wide phone the excess is cropped off the top
-	## (plain water surface) so the sand floor always lands right above the bottom bar.
-	var s: float = maxf(_view_rect.size.x / tex_size.x, _view_rect.size.y / tex_size.y)
+	## Cover-fit by cropping the picture to the interior's shape (anchored to the bottom, so the
+	## sand floor always sits at the bottom of the glass) rather than letting it overflow.
+	var interior_aspect: float = _view_rect.size.x / _view_rect.size.y
+	var crop := tex_size
+	if interior_aspect > tex_size.x / tex_size.y:
+		crop.y = tex_size.x / interior_aspect
+	else:
+		crop.x = tex_size.y * interior_aspect
+	sprite.region_enabled = true
+	sprite.region_rect = Rect2((tex_size.x - crop.x) * 0.5, tex_size.y - crop.y, crop.x, crop.y)
+	var s: float = _view_rect.size.x / crop.x
 	sprite.scale = Vector2.ONE * s
-	sprite.position = Vector2(_view_rect.position.x + (_view_rect.size.x - tex_size.x * s) * 0.5, _view_rect.end.y - tex_size.y * s)
+	sprite.position = Vector2.ZERO
 	add_child(sprite)
 	move_child(sprite, 0)
 	_background = sprite
@@ -429,25 +518,26 @@ func refresh_equipment_visuals() -> void:
 	move_child(_equipment_layer, mini(2, get_child_count() - 1))
 
 	var r := _view_rect
-	var top := HUD_TOP_PX + 8.0
+	var top := water_top_y() + 6.0
+	var eq_scale: float = clampf(r.size.y / 548.0, 0.45, 1.25)
 	if filter != null:
-		_add_equipment_sprite(filter.id, Vector2(r.end.x - r.size.x * 0.035, top), 150.0, Vector2(1.0, 0.0))
+		_add_equipment_sprite(filter.id, Vector2(r.end.x - r.size.x * 0.035, top), 150.0 * eq_scale, Vector2(1.0, 0.0))
 	if heater != null:
-		var heater_sprite := _add_equipment_sprite(heater.id, Vector2(r.position.x + r.size.x * 0.035, top + 10.0), 120.0, Vector2(0.0, 0.0))
+		var heater_sprite := _add_equipment_sprite(heater.id, Vector2(r.position.x + r.size.x * 0.035, top + 10.0), 120.0 * eq_scale, Vector2(0.0, 0.0))
 		if heater_sprite != null and heater_failed:
 			heater_sprite.modulate = Color(0.45, 0.45, 0.5)
 	var bubble_x := -1.0
 	if air_stone != null:
 		bubble_x = r.position.x + r.size.x * 0.7
-		var stone_height := 70.0 if air_stone.id == "air_stone" else 62.0
-		_add_equipment_sprite(air_stone.id, Vector2(bubble_x, _sand_top_y + 26.0), stone_height, Vector2(0.5, 1.0))
+		var stone_height := (70.0 if air_stone.id == "air_stone" else 62.0) * eq_scale
+		_add_equipment_sprite(air_stone.id, Vector2(bubble_x, _sand_top_y + 26.0 * eq_scale), stone_height, Vector2(0.5, 1.0))
 
 	if _bubbles != null:
 		_bubbles.queue_free()
 	_bubbles = BubbleEffect2D.new()
 	_bubbles.name = "Bubbles"
 	add_child(_bubbles)
-	_bubbles.setup(Rect2(r.position.x, HUD_TOP_PX * 0.5, r.size.x, _sand_top_y - HUD_TOP_PX * 0.5), bubble_x)
+	_bubbles.setup(Rect2(r.position.x, water_top_y(), r.size.x, maxf(40.0, _sand_top_y - water_top_y())), bubble_x)
 	if _dim != null:
 		_dim.visible = light_equipment == null
 
@@ -475,7 +565,7 @@ func _spawn_food_burst(at: Vector2 = Vector2.INF, count: int = 18, attract_all: 
 	if _food_layer == null:
 		return
 	var swim := get_swim_rect()
-	var origin := Vector2(randf_range(swim.position.x + swim.size.x * 0.3, swim.position.x + swim.size.x * 0.7), HUD_TOP_PX + 64.0)
+	var origin := Vector2(randf_range(swim.position.x + swim.size.x * 0.3, swim.position.x + swim.size.x * 0.7), water_top_y() + _view_rect.size.y * 0.1)
 	if at != Vector2.INF:
 		origin = at
 	var colors := [Color(0.95, 0.55, 0.2), Color(0.85, 0.3, 0.2), Color(0.95, 0.8, 0.35), Color(0.55, 0.75, 0.3)]
@@ -503,6 +593,7 @@ func unlock(liters: float, type: int, ambient_base_c: float) -> void:
 	ph = PH_BASELINE[tank_type]
 	specific_gravity = SG_TARGET[tank_type]
 	locked = false
+	visible = true
 	TankRegistry.register_tank(self)
 	_rebuild_view()
 
@@ -539,12 +630,14 @@ func reset_to_new(as_locked: bool, liters: float, type: TankType, ambient_base_c
 	if _algae != null:
 		_algae.set_level(0.0)
 		_mulm.set_level(0.0)
+	purchase_price = 0
 	tool = Tool.HAND
 	if as_locked and not locked:
 		TankRegistry.unregister_tank(self)
 	elif not as_locked and locked:
 		TankRegistry.register_tank(self)
 	locked = as_locked
+	visible = not as_locked
 	_rebuild_view()
 
 
@@ -666,6 +759,44 @@ func on_day_elapsed() -> void:
 		active_events.erase(event_id)
 
 	_advance_egg_batches(1.0)
+	_fry_predation()
+
+
+## Adult omnivores and carnivores eat the fry they share a tank with — the reason to move fry to
+## a tank of their own. A few percent per predator per day, capped.
+func _fry_predation() -> void:
+	if is_catching_up:
+		return
+	var predators := 0
+	var fry_list: Array = []
+	for fish in get_fish():
+		if fish.is_fry:
+			fry_list.append(fish)
+		elif fish.species.diet_type != FishSpeciesData.Diet.HERBIVORE and fish.species.archetype_id != "invertebrate" and fish.species.max_size_cm >= 3.0:
+			predators += 1
+	if predators == 0 or fry_list.is_empty():
+		return
+	var chance: float = clampf(0.025 * float(predators), 0.0, 0.12)
+	var eaten := 0
+	for fry in fry_list:
+		if randf() < chance:
+			fry.queue_free()
+			eaten += 1
+	if eaten > 0:
+		fry_eaten.emit(eaten)
+
+
+## Hands a fish over to another tank (GameController.move_fish does the checking).
+func release_fish(fish: FishController) -> void:
+	if fish.died.is_connected(_on_fish_died):
+		fish.died.disconnect(_on_fish_died)
+
+
+func adopt_fish(fish: FishController) -> void:
+	fish.reparent(self, false)
+	if not fish.died.is_connected(_on_fish_died):
+		fish.died.connect(_on_fish_died)
+	fish.relocated()
 
 
 func apply_offline_catch_up(sim_days_elapsed: float) -> void:
@@ -823,7 +954,7 @@ func to_save_dict() -> Dictionary:
 		"days_since_feeding": days_since_feeding,
 		"heater_failed": heater_failed,
 		"medication_remaining_days": medication_remaining_days,
-		"pending_egg_batches": pending_egg_batches, "algae": algae_level(), "mulm": mulm_level(),
+		"pending_egg_batches": pending_egg_batches, "algae": algae_level(), "mulm": mulm_level(), "purchase_price": purchase_price,
 		"tank_liters": tank_liters, "tank_type": tank_type, "locked": locked,
 		"ambient_temp_base_c": ambient_temp_base_c,
 		"equipment": {
@@ -867,6 +998,7 @@ func from_save_dict(d: Dictionary) -> void:
 	medication_remaining_days = d.get("medication_remaining_days", 0.0)
 	pending_egg_batches = d.get("pending_egg_batches", [])
 	_rebuild_view()
+	purchase_price = int(d.get("purchase_price", 0))
 	if _algae != null:
 		_algae.set_level(float(d.get("algae", 0.0)))
 		_mulm.set_level(float(d.get("mulm", 0.0)))

@@ -8,6 +8,6 @@ id = "led_light"
 display_name = "Full-Spectrum LED Light"
 slot = 2
 price = 20
-unlock_tier = 1
+unlock_tier = 9
 light_intensity = 1.4
 light_color = Color(1, 1, 0.97, 1)

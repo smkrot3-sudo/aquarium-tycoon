@@ -9,6 +9,8 @@ const POLL_INTERVAL := 0.5
 var _readings: VBoxContainer
 var _equipment: VBoxContainer
 var _treat_button: Button
+var _sell_button: Button
+var _sell_armed: bool = false
 var _poll_accum: float = 0.0
 
 
@@ -50,6 +52,10 @@ func _build() -> void:
 	stats_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	stats_button.pressed.connect(game.open_stats)
 	actions.add_child(stats_button)
+	_sell_button = UiKit.action_button(Localization.t("sell_tank_button", [0]), UiKit.icon("coin", 28.0), "danger", false, Vector2(0.0, 68.0), UiKit.FONT_BODY)
+	_sell_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_sell_button.pressed.connect(_on_sell_pressed)
+	actions.add_child(_sell_button)
 	var shop_button := UiKit.action_button(Localization.t("tank_buy_equipment"), UiKit.icon("bag", 30.0), "gold", false, Vector2(0.0, 68.0), UiKit.FONT_BUTTON)
 	shop_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	shop_button.pressed.connect(func(): game.open_shop(ShopPanel.Tab.EQUIPMENT))
@@ -59,6 +65,27 @@ func _build() -> void:
 		if visible:
 			refresh()
 	)
+
+
+## Selling asks for a second tap, so a stray touch can't get rid of a tank.
+func _on_sell_pressed() -> void:
+	if not _sell_armed:
+		_sell_armed = true
+		_refresh_sell_text()
+		get_tree().create_timer(3.5).timeout.connect(func():
+			_sell_armed = false
+			_refresh_sell_text()
+		)
+		return
+	_sell_armed = false
+	game.sell_tank(game.current_tank_index())
+
+
+func _refresh_sell_text() -> void:
+	if _sell_button == null:
+		return
+	var value := game.tank_sale_value(game.current_tank())
+	UiKit.set_action_text(_sell_button, Localization.t("sell_tank_confirm" if _sell_armed else "sell_tank_button", [value]))
 
 
 func _process(delta: float) -> void:
@@ -75,6 +102,7 @@ func refresh() -> void:
 	set_title(game.tank_display_name(game.current_tank_index()))
 	_fill_readings(tank)
 	_fill_equipment(tank)
+	_refresh_sell_text()
 	UiKit.set_button_kind(_treat_button, "danger" if tank.sick_fish_count() > 0 and tank.medication_remaining_days <= 0.0 else "secondary")
 
 

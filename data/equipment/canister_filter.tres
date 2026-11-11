@@ -8,6 +8,6 @@ id = "canister_filter"
 display_name = "Canister Filter"
 slot = 1
 price = 45
-unlock_tier = 1
+unlock_tier = 11
 filter_flow_liters_per_hour = 300.0
 filter_bio_capacity = 1.5

@@ -90,6 +90,7 @@ var _amplitude: float = 0.0
 var _bend: float = 0.0
 var _dimorph_scale: float = 1.0
 var _dimorph_tint: Color = Color.WHITE
+var _built_sex: int = -1
 
 var _target: Vector2 = Vector2.ZERO
 var _velocity: Vector2 = Vector2.ZERO
@@ -125,6 +126,8 @@ func setup(fish_species: FishSpeciesData, as_fry: bool = false, forced_sex: int 
 	if species.dimorphic:
 		_dimorph_scale = MALE_SCALE if sex == Sex.MALE else FEMALE_SCALE
 		_dimorph_tint = MALE_TINT if sex == Sex.MALE else FEMALE_TINT
+		if FishVisualBuilder2D.has_female_sprite(species):
+			_dimorph_tint = Color.WHITE
 	else:
 		_dimorph_scale = 1.0
 		_dimorph_tint = Color.WHITE
@@ -133,14 +136,28 @@ func setup(fish_species: FishSpeciesData, as_fry: bool = false, forced_sex: int 
 	_style = STYLES[_style_id]
 	_depth = randf()
 
-	## Built once per fish instance: an illustrated sprite when one exists for the species,
-	## else a procedural fallback shape (see FishVisualBuilder2D).
+	_build_visual()
+	## Fish further back are drawn behind nearer ones.
+	z_index = int(_depth * 3.0)
+	_apply_scale()
+
+	var tank := get_parent() as TankController
+	var zone: Rect2 = tank.get_zone_for(species) if tank != null else Rect2(100, 120, 900, 300)
+	position = TankController._random_point(zone)
+	_facing_goal = 1.0 if randf() < 0.5 else -1.0
+	_facing = _facing_goal
+	_pick_target()
+
+
+## Builds (or rebuilds, if a loaded save turns out to be the other sex) the fish's picture: an
+## illustrated sprite when one exists for the species and sex, else a procedural fallback shape.
+func _build_visual() -> void:
 	if _visual_root != null:
 		_visual_root.queue_free()
 	if _shadow != null:
 		_shadow.queue_free()
 		_shadow = null
-	_visual_root = FishVisualBuilder2D.build(species)
+	_visual_root = FishVisualBuilder2D.build(species, int(sex))
 	_material = _visual_root.get_meta("material", null) if _visual_root.has_meta("material") else null
 	if _material != null:
 		_material.set_shader_parameter("wave_length", _style["wave"])
@@ -153,16 +170,7 @@ func setup(fish_species: FishSpeciesData, as_fry: bool = false, forced_sex: int 
 		_shadow = _make_shadow()
 		add_child(_shadow)
 	add_child(_visual_root)
-	## Fish further back are drawn behind nearer ones.
-	z_index = int(_depth * 3.0)
-	_apply_scale()
-
-	var tank := get_parent() as TankController
-	var zone: Rect2 = tank.get_zone_for(species) if tank != null else Rect2(100, 120, 900, 300)
-	position = TankController._random_point(zone)
-	_facing_goal = 1.0 if randf() < 0.5 else -1.0
-	_facing = _facing_goal
-	_pick_target()
+	_built_sex = sex
 
 
 static func _resolve_style(fish_species: FishSpeciesData) -> String:
@@ -200,6 +208,21 @@ func _apply_scale() -> void:
 		var half_height: float = float(_visual_root.get_meta("half_height", 12.0)) * _base_scale
 		_shadow.position = Vector2(0.0, half_height * 0.78)
 		_shadow.scale = Vector2.ONE * _base_scale * FishVisualBuilder2D.display_length(species) / 70.0
+
+
+## The fish was just moved into another tank: pick a spot in its new water and settle in (a
+## move is a small stress, like acclimatising to new water in real life).
+func relocated() -> void:
+	var tank := get_parent() as TankController
+	if tank == null:
+		return
+	position = TankController._random_point(tank.get_zone_for(species))
+	_feeding_left = 0.0
+	_pause_left = 0.0
+	_gulp_state = 0
+	days_in_tank = 0.0
+	stress = minf(100.0, stress + 12.0)
+	_pick_target()
 
 
 ## This individual's colour shift (0 for a species that doesn't vary); Progress buckets it into
@@ -623,7 +646,9 @@ func from_save_dict(d: Dictionary) -> void:
 	fish_name = d.get("fish_name", fish_name if fish_name != "" else FishNames.pick(sex, Localization.current_language))
 	if species.dimorphic:
 		_dimorph_scale = MALE_SCALE if sex == Sex.MALE else FEMALE_SCALE
-		_dimorph_tint = MALE_TINT if sex == Sex.MALE else FEMALE_TINT
+		_dimorph_tint = Color.WHITE if FishVisualBuilder2D.has_female_sprite(species) else (MALE_TINT if sex == Sex.MALE else FEMALE_TINT)
+	if _built_sex != int(sex):
+		_build_visual()
 	if _material != null:
 		_material.set_shader_parameter("hue_shift", d.get("hue_shift", 0.0))
 	_apply_scale()

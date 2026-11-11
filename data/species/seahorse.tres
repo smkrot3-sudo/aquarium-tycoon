@@ -36,5 +36,5 @@ base_price = 85
 sell_price_adult = 55
 sell_price_fry = 8
 rarity_tier = 3
-unlock_tier = 4
+unlock_tier = 41
 source_note = "Gameplay values; see data/generate_species.py for how ranges were chosen."

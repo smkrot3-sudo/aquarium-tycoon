@@ -18,6 +18,8 @@ var cursor: Vector2 = Vector2.INF:
 		cursor = value
 		queue_redraw()
 var cursor_radius: float = 60.0
+## Blobs shrink with small tanks so a 15 L tank isn't smothered by a few big ones.
+var blob_scale: float = 1.0
 
 var _blobs: Array = []  ## {pos: Vector2 (0..1 in rect), size: float, weight: float, cover: float}
 
@@ -78,7 +80,7 @@ func clean_at(point: Vector2, radius: float) -> int:
 
 
 func _blob_radius(b: Dictionary) -> float:
-	var base := 58.0 if kind == Kind.ALGAE else 34.0
+	var base := (58.0 if kind == Kind.ALGAE else 34.0) * blob_scale
 	return base * float(b["size"]) * (0.45 + 0.55 * float(b["cover"]))
 
 

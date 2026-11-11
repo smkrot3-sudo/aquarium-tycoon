@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="TankPresetData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/resources/TankPresetData.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "tank_60"
+display_name = "Medium Freshwater Tank (60L)"
+price = 130
+unlock_tier = 9
+tank_liters = 60.0
+tank_type = 0
+ambient_temp_base_c = 22.0

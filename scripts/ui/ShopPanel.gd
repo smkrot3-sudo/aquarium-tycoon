@@ -100,7 +100,7 @@ func refresh() -> void:
 	for i in range(_tab_buttons.size()):
 		_tab_buttons[i].set_pressed_no_signal(i == _tab)
 	_cash_label.text = "$%d" % EconomyManager.cash
-	var to_next := Economy.earnings_to_next_tier(EconomyManager.lifetime_earnings)
+	var to_next := Levels.xp_to_next(EconomyManager.xp())
 	if to_next > 0:
 		_tier_label.text = Localization.t("shop_tier_progress", [EconomyManager.unlock_tier, to_next])
 	else:
@@ -237,15 +237,26 @@ func _add_fish_card(species: FishSpeciesData) -> void:
 	buy_area.add_child(toggle)
 	var male_button := UiKit.action_button("", UiKit.icon("male", 24.0), "primary" if chosen == FishController.Sex.MALE else "tab", false, Vector2(56.0, 44.0))
 	var female_button := UiKit.action_button("", UiKit.icon("female", 24.0), "primary" if chosen == FishController.Sex.FEMALE else "tab", false, Vector2(56.0, 44.0))
+	## Species with a separate female picture show it when ♀ is picked.
+	var art := shell["row"].get_child(0) as TextureRect
+	var set_art := func(female: bool):
+		var path := "res://assets/fish/%s.png" % species.id
+		if female and FishVisualBuilder2D.has_female_sprite(species):
+			path = FishVisualBuilder2D.female_sprite_path(species)
+		if art != null and ResourceLoader.exists(path):
+			art.texture = load(path)
+	set_art.call(chosen == FishController.Sex.FEMALE)
 	male_button.pressed.connect(func():
 		_sex_choice[species.id] = FishController.Sex.MALE
 		UiKit.style_button(male_button, "primary")
 		UiKit.style_button(female_button, "tab")
+		set_art.call(false)
 	)
 	female_button.pressed.connect(func():
 		_sex_choice[species.id] = FishController.Sex.FEMALE
 		UiKit.style_button(female_button, "primary")
 		UiKit.style_button(male_button, "tab")
+		set_art.call(true)
 	)
 	toggle.add_child(male_button)
 	toggle.add_child(female_button)

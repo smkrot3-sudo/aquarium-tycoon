@@ -19,7 +19,7 @@ ph_min = 7.0
 ph_max = 8.5
 gh_min = 15.0
 gh_max = 30.0
-min_tank_liters = 75.0
+min_tank_liters = 60.0
 diet_type = 1
 bioload_factor = 0.8
 temperament = 0
@@ -39,5 +39,5 @@ base_price = 8
 sell_price_adult = 7
 sell_price_fry = 1
 rarity_tier = 0
-unlock_tier = 1
+unlock_tier = 9
 source_note = "DRAFT placeholder ranges. unlock_tier=1 deliberately since its 75L minimum forces a tank upgrade past the MVP starter tank. Verify against Seriously Fish / Aquarium Co-Op before shipping real data."

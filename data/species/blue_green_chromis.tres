@@ -42,5 +42,5 @@ base_price = 22
 sell_price_adult = 14
 sell_price_fry = 0
 rarity_tier = 1
-unlock_tier = 2
+unlock_tier = 29
 source_note = "DRAFT placeholder ranges. Breeding intentionally disabled (fry_per_batch 0/0): real chromis are pelagic broadcast spawners essentially never bred in home aquaria, unlike this game's other egg-layers. Sell adults bought from the shop, not bred fry. Verify against Seriously Fish / Aquarium Co-Op before shipping real data."

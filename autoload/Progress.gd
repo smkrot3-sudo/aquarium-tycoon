@@ -100,6 +100,7 @@ func _pay_collection(kind: String, species_id: String, base_amount: int) -> void
 		return
 	var amount := maxi(1, int(round(base_amount * GameState.reward_multiplier())))
 	EconomyManager.earn(amount, "Collection %s" % kind)
+	EconomyManager.add_xp(amount * 2)
 	collection_reward.emit(kind, species_id, amount)
 
 
@@ -132,6 +133,7 @@ func check() -> void:
 				completed[id] = true
 				var reward := maxi(1, int(round(m[4] * GameState.reward_multiplier())))
 				EconomyManager.earn(reward, "Mission %s" % id)
+				EconomyManager.add_xp(reward)
 				mission_completed.emit(id, reward)
 				again = true
 		if stage <= Goals.STAGE_COUNT and stage_done(stage):

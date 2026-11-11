@@ -8,5 +8,5 @@ id = "powerhead"
 display_name = "Powerhead"
 slot = 3
 price = 28
-unlock_tier = 2
+unlock_tier = 27
 oxygen_boost = 4.0

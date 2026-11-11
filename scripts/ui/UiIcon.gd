@@ -136,6 +136,11 @@ func _draw() -> void:
 				var rad: float = s * (0.44 if i % 2 == 0 else 0.2)
 				pts.append(c + Vector2(cos(a), sin(a)) * rad)
 			draw_colored_polygon(pts, color)
+		"zoom":
+			draw_arc(c + Vector2(-s * 0.06, -s * 0.06), s * 0.27, 0.0, TAU, 28, color, w * 1.1, true)
+			draw_line(c + Vector2(s * 0.14, s * 0.14), c + Vector2(s * 0.4, s * 0.4), color, w * 1.5, true)
+			draw_line(c + Vector2(-s * 0.18, -s * 0.06), c + Vector2(s * 0.06, -s * 0.06), color, w * 0.8, true)
+			draw_line(c + Vector2(-s * 0.06, -s * 0.18), c + Vector2(-s * 0.06, s * 0.06), color, w * 0.8, true)
 		"question":
 			draw_arc(c + Vector2(0, -s * 0.12), s * 0.2, PI * 1.1, TAU + PI * 0.45, 18, color, w * 1.2, true)
 			draw_line(c + Vector2(s * 0.14, s * 0.06), c + Vector2(0, s * 0.18), color, w * 1.2, true)

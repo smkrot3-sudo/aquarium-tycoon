@@ -28,17 +28,6 @@ static func lifespan_days(species: FishSpeciesData) -> float:
 	return maxf(maturity_days(species) * 3.0, species.lifespan_sim_days * MATURITY_PACE)
 
 
-## Lifetime earnings still needed to reach the next unlock tier (0 when already at the top).
-static func earnings_to_next_tier(lifetime_earnings: int) -> int:
-	var tier := unlock_tier_for_earnings(lifetime_earnings)
-	if tier + 1 >= TIER_THRESHOLDS.size():
-		return 0
-	return TIER_THRESHOLDS[tier + 1] - lifetime_earnings
-
-## Unlock tiers are gated by cumulative lifetime earnings (simplest possible rule for MVP;
-## see plan Section 4 for the Phase-2+ reputation layer).
-const TIER_THRESHOLDS := [0, 60, 150, 350, 800, 1800]
-
 ## Rough real-world "inches of fish per gallon" style rule of thumb, converted to this game's
 ## bioload_factor units per liter. Caps PURCHASES (not breeding) — an overstocked tank from
 ## breeding is still a real, player-fixable emergent problem (sell fry before it gets there),
@@ -47,14 +36,6 @@ const BIOLOAD_PER_LITER := 0.125
 
 static func max_safe_bioload(tank_liters: float) -> float:
 	return tank_liters * BIOLOAD_PER_LITER
-
-
-static func unlock_tier_for_earnings(lifetime_earnings: int) -> int:
-	var tier := 0
-	for i in range(TIER_THRESHOLDS.size()):
-		if lifetime_earnings >= TIER_THRESHOLDS[i]:
-			tier = i
-	return tier
 
 
 static func fry_sale_value(species: FishSpeciesData, is_fry: bool) -> int:

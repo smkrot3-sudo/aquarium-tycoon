@@ -19,8 +19,21 @@ static func display_length(species: FishSpeciesData) -> float:
 	return 22.0 + 11.0 * sqrt(maxf(species.max_size_cm, 1.0))
 
 
-static func build(species: FishSpeciesData) -> Node2D:
+static func female_sprite_path(species: FishSpeciesData) -> String:
+	return "res://assets/fish/%s_f.png" % species.id
+
+
+## True when this species has its own picture of a female (a plain female guppy, a swordtail
+## with no sword...) rather than the one shared by both sexes.
+static func has_female_sprite(species: FishSpeciesData) -> bool:
+	return ResourceLoader.exists(female_sprite_path(species))
+
+
+## `sex`: 1 = female (see FishController.Sex); anything else draws the standard picture.
+static func build(species: FishSpeciesData, sex: int = -1) -> Node2D:
 	var sprite_path := "res://assets/fish/%s.png" % species.id
+	if sex == 1 and has_female_sprite(species):
+		sprite_path = female_sprite_path(species)
 	if ResourceLoader.exists(sprite_path):
 		return _build_sprite(species, sprite_path)
 	var fallback := FishShapeBuilder2D.build(species)

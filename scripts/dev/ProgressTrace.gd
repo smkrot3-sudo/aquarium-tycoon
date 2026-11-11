@@ -183,7 +183,7 @@ func _ready() -> void:
 	cash_before = EconomyManager.cash
 	_check("Sandbox can afford anything", EconomyManager.can_afford(1000000))
 	_check("...and spending costs nothing", EconomyManager.spend(5000, "test") and EconomyManager.cash == cash_before)
-	_check("...with every tier open", EconomyManager.unlock_tier == Economy.TIER_THRESHOLDS.size() - 1)
+	_check("...with every tier open", EconomyManager.unlock_tier == Levels.MAX_LEVEL)
 	_check("...and rare fish always in stock", Market.in_stock(lionfish))
 
 	# --- an old save with no mode information keeps playing as free play

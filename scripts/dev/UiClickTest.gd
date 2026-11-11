@@ -23,6 +23,11 @@ func _ready() -> void:
 	await _tap_text("התחל")
 	_check("Start hides the home screen", not _main.home.visible and not _main.new_game.visible)
 	_check("Welcome panel opened on a new game", _main.welcome.visible)
+	## The starter tank is 15 L and fish unlock by level; give the test a roomier tank and level.
+	EconomyManager.add_xp(Levels.xp_for_level(10))
+	EconomyManager.cash = 60
+	tank.tank_liters = 60.0
+	tank._rebuild_view()
 
 	await _tap_text("יאללה, לחנות")
 	_check("Welcome button opens the shop", _main.shop.visible and not _main.welcome.visible)
@@ -63,10 +68,11 @@ func _ready() -> void:
 		## Park it in open water so a HUD button or the edge of the tank can't be under the tap.
 		a_guppy.position = tank.get_swim_rect().get_center()
 		await _frames(2)
+		var guppy_screen := tank.to_global(a_guppy.position)
 		var event := InputEventMouseButton.new()
 		event.button_index = MOUSE_BUTTON_LEFT
-		event.position = a_guppy.position
-		event.global_position = a_guppy.position
+		event.position = guppy_screen
+		event.global_position = guppy_screen
 		event.pressed = true
 		get_viewport().push_input(event, true)
 		await _frames(6)
@@ -157,7 +163,7 @@ func _ready() -> void:
 	var blob_point := Vector2.ZERO
 	for blob in tank._algae._blobs:
 		if float(blob["cover"]) > 0.3:
-			blob_point = tank._algae.rect.position + Vector2(blob["pos"].x * tank._algae.rect.size.x, blob["pos"].y * tank._algae.rect.size.y)
+			blob_point = tank.to_global(tank._algae.rect.position + Vector2(blob["pos"].x * tank._algae.rect.size.x, blob["pos"].y * tank._algae.rect.size.y))
 			break
 	if blob_point != Vector2.ZERO:
 		var drag := InputEventMouseButton.new()

@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="TankPresetData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/resources/TankPresetData.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "marine_120"
+display_name = "Medium Saltwater Tank (120L)"
+price = 1100
+unlock_tier = 31
+tank_liters = 120.0
+tank_type = 1
+ambient_temp_base_c = 24.0

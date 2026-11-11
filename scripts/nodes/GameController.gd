@@ -21,6 +21,7 @@ const BAILOUT_CASH := 20
 
 @onready var _tanks: Array[TankController] = [%TankInstance, %Tank2Instance, %Tank3Instance, %Tank4Instance, %Tank5Instance, %Tank6Instance, %Tank7Instance, %Tank8Instance]
 @onready var _ui_layer: CanvasLayer = $UI
+@onready var room: RoomView = $TanksContainer
 var _current_tank_index: int = 0
 
 var ui_root: Control
@@ -37,6 +38,7 @@ var new_game: NewGamePanel
 var business: BusinessPanel
 var stats: StatsPanel
 var advisor: AdvisorPanel
+var move_panel: MoveFishPanel
 var toast_view: ToastView
 
 ## Where the in-app update flow currently is — see UpdateChecker (autoload) for the actual
@@ -50,6 +52,7 @@ var _show_welcome_on_start: bool = false
 var _needs_setup: bool = false
 var tool: int = TankController.Tool.HAND
 var _pinch_count: int = 0
+var _known_level: int = 1
 var _alert_last_shown: Dictionary = {}  ## message key -> Time.get_ticks_msec() of last toast
 
 
@@ -69,10 +72,12 @@ func _ready() -> void:
 	var had_save := SaveManager.has_save() and SaveManager.load_game()
 	_show_welcome_on_start = not had_save
 	_needs_setup = not had_save
+	_known_level = EconomyManager.unlock_tier
 	EconomyManager.apply_mode()
 
 	for tank in _tanks:
 		tank.game = self
+		tank.fry_eaten.connect(_on_fry_eaten)
 		tank.water_quality_alert.connect(_on_water_quality_alert)
 		tank.fish_born.connect(_on_fish_born)
 		tank.fish_died.connect(_on_fish_died)
@@ -102,9 +107,14 @@ func _ready() -> void:
 
 	## From here on the game state is real (loaded, or deliberately new), so saving is safe.
 	SaveManager.saving_enabled = true
+	room.setup(self, _tanks)
 	_build_ui()
 	_check_bailout()
-	_select_tank(0 if not _tanks[0].locked else 1)
+	for i in range(_tanks.size()):
+		if not _tanks[i].locked:
+			_select_tank(i)
+			break
+	room.focus_tank(_current_tank_index, true)
 	show_home()
 	## Quiet check at launch so the home screen can offer the update without being asked.
 	check_for_update()
@@ -144,6 +154,7 @@ func _build_ui() -> void:
 	business = BusinessPanel.new()
 	stats = StatsPanel.new()
 	advisor = AdvisorPanel.new()
+	move_panel = MoveFishPanel.new()
 	for panel in _all_panels():
 		panel.game = self
 		ui_root.add_child(panel)
@@ -154,7 +165,7 @@ func _build_ui() -> void:
 
 
 func _all_panels() -> Array:
-	return [shop, fish_panel, tank_panel, guide, settings, welcome, fish_detail, new_game, business, stats, advisor]
+	return [shop, fish_panel, tank_panel, guide, settings, welcome, fish_detail, new_game, business, stats, advisor, move_panel]
 
 
 func _rebuild_ui() -> void:
@@ -232,7 +243,9 @@ func begin_new_game(mode: int, difficulty: int) -> void:
 	GameState.difficulty = difficulty
 	EconomyManager.cash = GameState.start_cash()
 	EconomyManager.lifetime_earnings = 0
-	EconomyManager.unlock_tier = 0
+	EconomyManager.bonus_xp = 0
+	EconomyManager.unlock_tier = 1
+	_known_level = 1
 	EconomyManager.apply_mode()
 	EconomyManager.cash_changed.emit(EconomyManager.cash)
 	_needs_setup = false
@@ -315,9 +328,126 @@ func select_tank(index: int) -> void:
 
 func _select_tank(index: int) -> void:
 	_current_tank_index = index
-	for i in range(_tanks.size()):
-		_tanks[i].visible = (i == index)
+	room.focus_tank(index)
 	state_changed.emit()
+
+
+## A tap on another tank's water (TankController._unhandled_input): go to that tank.
+func focus_tank_from_room(tank: TankController) -> void:
+	var index := _tanks.find(tank)
+	if index < 0 or tank.locked:
+		return
+	if room.zoom_mode == RoomView.Zoom.OVERVIEW:
+		room.set_zoom(RoomView.Zoom.FOCUS)
+	select_tank(index)
+
+
+# ----------------------------------------------------------------------------------------
+# Moving fish between tanks, and selling a tank
+# ----------------------------------------------------------------------------------------
+
+## "" when `fish` could live in `dest`, otherwise the localized reason it can't.
+func move_block_reason(fish: FishController, dest: TankController) -> String:
+	var species := fish.species
+	if dest.locked:
+		return Localization.t("move_no_tank")
+	var salt: bool = dest.tank_type == TankController.TankType.SALTWATER
+	if species.is_marine and not salt:
+		return Localization.t("alert_marine_needs_saltwater", [Localization.t("sp_%s" % species.id)])
+	if not species.is_marine and salt:
+		return Localization.t("alert_freshwater_in_saltwater", [Localization.t("sp_%s" % species.id)])
+	if not fish.is_fry and dest.tank_liters < species.min_tank_liters:
+		return Localization.t("alert_tank_too_small", [int(species.min_tank_liters), int(dest.tank_liters)])
+	var load: float = species.bioload_factor * (fish.size_cm / maxf(species.max_size_cm, 0.01))
+	if dest.total_bioload() + load > Economy.max_safe_bioload(dest.tank_liters) * 1.05:
+		return Localization.t("alert_tank_at_capacity")
+	return ""
+
+
+## Moves as many of `fish_list` as fit into the tank at `dest_index`; returns how many moved.
+func move_fish(fish_list: Array, dest_index: int) -> int:
+	ErrorLog.crumb("move_fish %d to %d" % [fish_list.size(), dest_index])
+	if dest_index < 0 or dest_index >= _tanks.size() or _tanks[dest_index].locked:
+		return 0
+	var dest := _tanks[dest_index]
+	var moved := 0
+	var first_reason := ""
+	for fish in fish_list:
+		if not is_instance_valid(fish) or fish.get_parent() == dest:
+			continue
+		var reason := move_block_reason(fish, dest)
+		if reason != "":
+			if first_reason == "":
+				first_reason = reason
+			continue
+		var source: TankController = fish.get_parent()
+		source.release_fish(fish)
+		dest.adopt_fish(fish)
+		moved += 1
+	if moved > 0:
+		AudioManager.play("splash")
+		toast(Localization.t("toast_moved", [moved, tank_display_name(dest_index)]), "good")
+	if first_reason != "" and moved < fish_list.size():
+		toast(first_reason, "bad")
+	state_changed.emit()
+	return moved
+
+
+func open_move_fish(fish_list: Array) -> void:
+	for panel in _all_panels():
+		if panel != move_panel and panel != null and panel.visible:
+			panel.close()
+	move_panel.setup(fish_list)
+	move_panel.open()
+
+
+## Money back for a tank: part of what it cost, and half of what its equipment cost.
+func tank_sale_value(tank: TankController) -> int:
+	var total: float = float(tank.purchase_price) * 0.6
+	for item in [tank.heater, tank.filter, tank.light_equipment, tank.air_stone]:
+		if item != null:
+			total += float(item.price) * 0.5
+	return int(round(total))
+
+
+func sell_tank(index: int) -> bool:
+	ErrorLog.crumb("sell_tank %d" % index)
+	if index < 0 or index >= _tanks.size() or _tanks[index].locked:
+		return false
+	if owned_tank_count() <= 1:
+		toast(Localization.t("sell_tank_last"), "bad")
+		return false
+	var tank := _tanks[index]
+	if not tank.get_fish().is_empty():
+		toast(Localization.t("sell_tank_not_empty"), "bad")
+		return false
+	var value := tank_sale_value(tank)
+	EconomyManager.earn(value, "Sold tank")
+	tank.reset_to_new(true, 15.0, TankController.TankType.FRESHWATER, 22.0)
+	AudioManager.play("cash")
+	toast(Localization.t("toast_tank_sold", [value]), "good")
+	if index == _current_tank_index:
+		for i in range(_tanks.size()):
+			if not _tanks[i].locked:
+				_select_tank(i)
+				break
+	room.layout()
+	state_changed.emit()
+	return true
+
+
+func _on_fry_eaten(count: int) -> void:
+	var now := Time.get_ticks_msec()
+	if _alert_last_shown.has("fry_eaten") and now - int(_alert_last_shown["fry_eaten"]) < 20000:
+		return
+	_alert_last_shown["fry_eaten"] = now
+	toast(Localization.t("toast_fry_eaten", [count]), "bad")
+
+
+## The HUD zoom button: look at one tank, look closer, or see the whole room.
+func cycle_zoom() -> void:
+	room.cycle_zoom()
+	toast(Localization.t(room.zoom_label_key()), "info")
 
 
 ## HUD tank button: on to the next owned tank, or straight to the tank shop if there's only one.
@@ -389,6 +519,7 @@ func buy_tank(preset_id: String) -> bool:
 		return false
 	var slot := _first_free_slot()
 	_tanks[slot].unlock(preset.tank_liters, preset.tank_type, preset.ambient_temp_base_c)
+	_tanks[slot].purchase_price = preset.price
 	AudioManager.play("coin")
 	_select_tank(slot)
 	toast(Localization.t("toast_bought", [Localization.t("tank_%s" % preset_id)]), "good")
@@ -400,7 +531,7 @@ func buy_tank(preset_id: String) -> bool:
 # ----------------------------------------------------------------------------------------
 
 func _tier_lock_text(tier: int) -> String:
-	var needed: int = maxi(0, Economy.TIER_THRESHOLDS[mini(tier, Economy.TIER_THRESHOLDS.size() - 1)] - EconomyManager.lifetime_earnings)
+	var needed: int = maxi(0, Levels.xp_for_level(tier) - EconomyManager.xp())
 	return Localization.t("shop_locked_tier", [tier, needed])
 
 
@@ -675,9 +806,9 @@ func reset_game() -> void:
 	EconomyManager.from_save_dict({})
 	EconomyManager.apply_mode()
 	EconomyManager.cash_changed.emit(EconomyManager.cash)
-	TimeManager.sim_minutes_total = 0.0
+	TimeManager.sim_minutes_total = TimeManager.START_MINUTES
 	TimeManager.current_season = TimeManager.Season.SPRING
-	_tanks[0].reset_to_new(false, 40.0, TankController.TankType.FRESHWATER, 22.0)
+	_tanks[0].reset_to_new(false, 15.0, TankController.TankType.FRESHWATER, 22.0)
 	for i in range(1, _tanks.size()):
 		_tanks[i].reset_to_new(true, 40.0, TankController.TankType.FRESHWATER, 22.0)
 	_alert_last_shown.clear()
@@ -745,7 +876,7 @@ func current_tip() -> Dictionary:
 		return {"text": Localization.t("tip_buy_light"), "action": to_shop_equipment, "kind": "info"}
 	if Market.orders_ready_count() > 0:
 		return {"text": Localization.t("tip_order_ready"), "action": open_business.bind(BusinessPanel.Tab.ORDERS), "kind": "info"}
-	var to_next := Economy.earnings_to_next_tier(EconomyManager.lifetime_earnings)
+	var to_next := Levels.xp_to_next(EconomyManager.xp())
 	if to_next > 0:
 		return {"text": Localization.t("tip_next_tier", [to_next, EconomyManager.unlock_tier + 1]), "action": open_fish_panel, "kind": "info"}
 	return {"text": Localization.t("tip_all_good"), "action": open_tank_panel, "kind": "info"}
@@ -957,9 +1088,33 @@ func _check_bailout() -> void:
 	toast(Localization.t("toast_bailout", [BAILOUT_CASH]), "good")
 
 
-func _on_unlock_tier_changed(new_tier: int) -> void:
-	toast(Localization.t("toast_tier_up", [new_tier]), "good")
-	AudioManager.play("coin")
+## Level up: a bonus, and a list of what the new level unlocked in the shop.
+func _on_unlock_tier_changed(new_level: int) -> void:
+	var old_level := _known_level
+	_known_level = new_level
+	if new_level <= old_level or GameState.is_sandbox():
+		state_changed.emit()
+		return
+	var unlocked: Array = []
+	for species in ShopManager.species_catalog.values():
+		if species.unlock_tier > old_level and species.unlock_tier <= new_level:
+			unlocked.append(Localization.t("sp_%s" % species.id))
+	for equipment in ShopManager.equipment_catalog.values():
+		if equipment.unlock_tier > old_level and equipment.unlock_tier <= new_level:
+			unlocked.append(Localization.t("eq_%s" % equipment.id))
+	for preset in ShopManager.tank_preset_catalog.values():
+		if preset.unlock_tier > old_level and preset.unlock_tier <= new_level:
+			unlocked.append(Localization.t("tank_%s" % preset.id))
+	var bonus := 5 * new_level
+	EconomyManager.cash += bonus
+	EconomyManager.cash_changed.emit(EconomyManager.cash)
+	if unlocked.is_empty():
+		toast(Localization.t("toast_level_up_bonus", [new_level, bonus]), "good")
+	else:
+		var shown: Array = unlocked.slice(0, 4)
+		var text := ", ".join(shown) + ("…" if unlocked.size() > 4 else "")
+		toast(Localization.t("toast_level_up", [new_level, text]), "good")
+	AudioManager.play("fanfare")
 	state_changed.emit()
 
 

@@ -139,6 +139,16 @@ func _add_row(species: FishSpeciesData, g: Dictionary) -> void:
 	var buttons := UiKit.hbox(8)
 	buttons.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	row.add_child(buttons)
+	if game.owned_tank_count() > 1:
+		var move := UiKit.action_button("", UiKit.icon("tank", 30.0), "secondary", false, Vector2(70.0, 84.0))
+		UiKit.on_tap(move, _scroll, func():
+			var in_tank: Array = []
+			for fish in game.current_tank().get_fish():
+				if fish.species == species:
+					in_tank.append(fish)
+			game.open_move_fish(in_tank)
+		)
+		buttons.add_child(move)
 	if g["adults"] > 0:
 		var sell_adult := UiKit.action_button("$%d" % species.sell_price_adult, UiKit.label(Localization.t("fish_sell_adult"), UiKit.FONT_SMALL, UiKit.COL_TEXT, true), "warn", true, Vector2(150.0, 84.0), 26)
 		UiKit.on_tap(sell_adult, _scroll, game.sell_one_of.bind(species.id, false))

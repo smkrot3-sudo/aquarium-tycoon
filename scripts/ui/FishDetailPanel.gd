@@ -51,6 +51,13 @@ func _build() -> void:
 	_auction_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_auction_button.pressed.connect(_on_auction_pressed)
 	actions.add_child(_auction_button)
+	var move_button := UiKit.action_button(Localization.t("fish_detail_move"), UiKit.icon("tank", 28.0), "secondary", false, Vector2(0.0, 68.0), UiKit.FONT_BUTTON)
+	move_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	move_button.pressed.connect(func():
+		if _fish != null and is_instance_valid(_fish):
+			game.open_move_fish([_fish])
+	)
+	actions.add_child(move_button)
 
 
 ## Called by TankController (via GameController.open_fish_detail) right before `open()`.
@@ -71,7 +78,10 @@ func refresh() -> void:
 		return
 	var species := _fish.species
 	set_title(_fish.fish_name)
-	_picture.texture = load("res://assets/fish/%s.png" % species.id) if ResourceLoader.exists("res://assets/fish/%s.png" % species.id) else null
+	var picture_path := "res://assets/fish/%s.png" % species.id
+	if _fish.sex == FishController.Sex.FEMALE and FishVisualBuilder2D.has_female_sprite(species):
+		picture_path = FishVisualBuilder2D.female_sprite_path(species)
+	_picture.texture = load(picture_path) if ResourceLoader.exists(picture_path) else null
 	var is_male: bool = _fish.sex == FishController.Sex.MALE
 	_sex_badge.text = Localization.t("fish_detail_sex_male") if is_male else Localization.t("fish_detail_sex_female")
 	_sex_badge.add_theme_color_override("font_color", Color(0.45, 0.7, 1.0) if is_male else Color(1.0, 0.55, 0.75))
