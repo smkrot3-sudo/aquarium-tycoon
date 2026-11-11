@@ -20,6 +20,14 @@ static func maturity_days(species: FishSpeciesData) -> float:
 	return maxf(1.0, species.maturity_age_sim_days * MATURITY_PACE)
 
 
+## Scaled by the same MATURITY_PACE as maturity_days(), so a species that matures 10x faster
+## than real life also lives out its (still much shorter) span 10x faster — the ratio between
+## "grown up" and "old age" stays the one real fishkeeping references give for the species,
+## instead of adults either dying almost on reaching maturity or living forever in game time.
+static func lifespan_days(species: FishSpeciesData) -> float:
+	return maxf(maturity_days(species) * 3.0, species.lifespan_sim_days * MATURITY_PACE)
+
+
 ## Lifetime earnings still needed to reach the next unlock tier (0 when already at the top).
 static func earnings_to_next_tier(lifetime_earnings: int) -> int:
 	var tier := unlock_tier_for_earnings(lifetime_earnings)

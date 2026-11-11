@@ -3,7 +3,9 @@ class_name ShopPanel
 ## The shop: four tabs (freshwater fish / saltwater fish / equipment / tanks) of cards generated
 ## straight from ShopManager's catalogs — adding a species or an item file adds its card, no UI
 ## work. Every card says in plain words why it can't be bought when it can't (locked level,
-## wrong water, tank too small...), instead of a button that silently does nothing.
+## wrong water, tank too small...), instead of a button that silently does nothing. Fish cards
+## carry their own ♂/♀ pick (GameController.buy_fish's `sex` argument) since breeding now needs
+## one of each — buying blind would make half of every purchase a coin flip the player can't see.
 
 enum Tab { FRESH, SALT, EQUIPMENT, TANKS }
 
@@ -25,6 +27,9 @@ var _banner: PanelContainer
 var _banner_label: Label
 var _banner_button: Button
 var _banner_action: Callable
+## species_id -> FishController.Sex last picked on its card, remembered across a refresh so
+## toggling ♂/♀ and then buying doesn't reset what you just chose.
+var _sex_choice: Dictionary = {}
 
 
 func _build() -> void:
@@ -152,17 +157,7 @@ func _fill_fish(saltwater: bool) -> void:
 		return a.id < b.id
 	)
 	for species in list:
-		var facts := Localization.t("shop_fish_facts", [int(species.min_tank_liters), species.sell_price_adult])
-		if species.fry_per_batch_max > 0:
-			facts += " · " + Localization.t("shop_fish_breeds")
-		var owned: int = game.count_fish(species.id, false) + game.count_fish(species.id, true)
-		var status := Localization.t("shop_owned", [owned]) if owned > 0 else ""
-		_add_card(
-			"res://assets/fish/%s.png" % species.id, Vector2(120.0, 84.0),
-			Localization.t("sp_%s" % species.id), facts, Localization.t("desc_sp_%s" % species.id),
-			status, game.fish_block_reason(species), species.base_price,
-			game.buy_fish.bind(species.id)
-		)
+		_add_fish_card(species)
 
 
 func _fill_equipment() -> void:
@@ -177,13 +172,13 @@ func _fill_equipment() -> void:
 	for equipment in list:
 		var icon_id: String = EQUIPMENT_ICON.get(equipment.id, equipment.id)
 		var installed: bool = game.is_equipment_installed(equipment)
-		_add_card(
+		var shell := _build_card_shell(
 			"res://assets/equipment/%s.png" % icon_id, Vector2(96.0, 96.0),
 			Localization.t("eq_%s" % equipment.id), Localization.t("slot_%d" % equipment.slot),
 			Localization.t("desc_eq_%s" % equipment.id),
-			"", game.equipment_block_reason(equipment), equipment.price,
-			game.buy_equipment.bind(equipment.id), installed
+			"", game.equipment_block_reason(equipment), installed
 		)
+		shell["row"].add_child(_buy_button(equipment.price, game.equipment_block_reason(equipment), installed, game.buy_equipment.bind(equipment.id)))
 
 
 func _fill_tanks() -> void:
@@ -194,17 +189,75 @@ func _fill_tanks() -> void:
 		var facts := Localization.t("shop_tank_facts", [
 			Localization.t("tank_type_salt") if is_marine else Localization.t("tank_type_fresh"), int(preset.tank_liters),
 		])
-		_add_card(
+		var shell := _build_card_shell(
 			TankController.BACKGROUND[preset.tank_type], Vector2(140.0, 80.0),
 			Localization.t("tank_%s" % preset.id), facts,
 			Localization.t("desc_tank_%s" % preset.id),
-			"", game.tank_block_reason(preset), preset.price,
-			game.buy_tank.bind(preset.id)
+			"", game.tank_block_reason(preset), false
 		)
+		shell["row"].add_child(_buy_button(preset.price, game.tank_block_reason(preset), false, game.buy_tank.bind(preset.id)))
 
 
-## One shop card: [art] [name / facts / description / status-or-reason] [price button].
-func _add_card(icon_path: String, icon_size: Vector2, title: String, facts: String, description: String, status: String, block_reason: String, price: int, on_buy: Callable, installed: bool = false) -> void:
+## Fish get their own card layout: the price area is a ♂/♀ pick plus one buy button instead of
+## a single generic buy button, since which one you're buying now actually matters.
+func _add_fish_card(species: FishSpeciesData) -> void:
+	var block_reason := game.fish_block_reason(species)
+	var facts := Localization.t("shop_fish_facts", [int(species.min_tank_liters), species.sell_price_adult])
+	if species.fry_per_batch_max > 0:
+		facts += " · " + Localization.t("shop_fish_breeds")
+	var males: int = 0
+	var females: int = 0
+	for fish in game.current_tank().get_fish():
+		if fish.species == species and not fish.is_fry:
+			if fish.sex == FishController.Sex.MALE:
+				males += 1
+			else:
+				females += 1
+	var status := Localization.t("shop_owned_sexed", [males, females]) if males + females > 0 else ""
+	var shell := _build_card_shell(
+		"res://assets/fish/%s.png" % species.id, Vector2(120.0, 84.0),
+		Localization.t("sp_%s" % species.id), facts, Localization.t("desc_sp_%s" % species.id),
+		status, block_reason, false
+	)
+
+	var buy_area := UiKit.vbox(4)
+	buy_area.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	shell["row"].add_child(buy_area)
+
+	if block_reason != "":
+		buy_area.add_child(_buy_button(species.base_price, block_reason, false, game.buy_fish.bind(species.id)))
+		return
+
+	var chosen: int = _sex_choice.get(species.id, FishController.Sex.MALE)
+	var toggle := UiKit.hbox(4)
+	toggle.alignment = BoxContainer.ALIGNMENT_CENTER
+	buy_area.add_child(toggle)
+	var male_button := UiKit.action_button("", UiKit.icon("male", 24.0), "primary" if chosen == FishController.Sex.MALE else "tab", false, Vector2(56.0, 44.0))
+	var female_button := UiKit.action_button("", UiKit.icon("female", 24.0), "primary" if chosen == FishController.Sex.FEMALE else "tab", false, Vector2(56.0, 44.0))
+	male_button.pressed.connect(func():
+		_sex_choice[species.id] = FishController.Sex.MALE
+		UiKit.style_button(male_button, "primary")
+		UiKit.style_button(female_button, "tab")
+	)
+	female_button.pressed.connect(func():
+		_sex_choice[species.id] = FishController.Sex.FEMALE
+		UiKit.style_button(female_button, "primary")
+		UiKit.style_button(male_button, "tab")
+	)
+	toggle.add_child(male_button)
+	toggle.add_child(female_button)
+
+	var affordable: bool = EconomyManager.can_afford(species.base_price)
+	var buy := UiKit.action_button("$%d" % species.base_price, UiKit.label(Localization.t("shop_buy"), UiKit.FONT_SMALL, UiKit.COL_TEXT, true), "primary" if affordable else "secondary", true, Vector2(132.0, 56.0), 24)
+	## Reads the CURRENT choice at buy time (a Callable can't see `chosen` update later), not
+	## the value captured when the button was built.
+	UiKit.on_tap(buy, _scroll, func(): game.buy_fish(species.id, _sex_choice.get(species.id, FishController.Sex.MALE)))
+	buy_area.add_child(buy)
+
+
+## Shared left side of every card: [art] [name / facts / description / status-or-reason]. The
+## caller appends whatever buy control(s) belong on the right into the returned "row".
+func _build_card_shell(icon_path: String, icon_size: Vector2, title: String, facts: String, description: String, status: String, block_reason: String, installed: bool) -> Dictionary:
 	var blocked: bool = block_reason != ""
 	var card := UiKit.panel(UiKit.COL_CARD_DIM if blocked and not installed else UiKit.COL_CARD, 18, 12.0, 10.0)
 	card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -238,6 +291,12 @@ func _add_card(icon_path: String, icon_size: Vector2, title: String, facts: Stri
 	elif status != "":
 		text.add_child(UiKit.label(status, UiKit.FONT_SMALL, UiKit.COL_GOOD))
 
+	return {"card": card, "row": row}
+
+
+## The single generic buy button used by equipment and tanks (fish build their own ♂/♀ area).
+func _buy_button(price: int, block_reason: String, installed: bool, on_buy: Callable) -> Button:
+	var blocked: bool = block_reason != ""
 	var buy: Button
 	if installed:
 		buy = UiKit.action_button("", UiKit.icon("check", 36.0, UiKit.COL_GOOD), "tab", false, Vector2(132.0, 84.0))
@@ -251,4 +310,4 @@ func _add_card(icon_path: String, icon_size: Vector2, title: String, facts: Stri
 		buy = UiKit.action_button("$%d" % price, UiKit.label(Localization.t("shop_buy"), UiKit.FONT_BODY, UiKit.COL_TEXT, true), "primary" if affordable else "secondary", true, Vector2(132.0, 84.0), 28)
 		UiKit.on_tap(buy, _scroll, on_buy)
 	buy.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	row.add_child(buy)
+	return buy

@@ -12,8 +12,8 @@ func _ready() -> void:
 	var tank: TankController = main.current_tank()
 
 	main.buy_equipment("basic_filter")
-	main.buy_fish("guppy")
-	main.buy_fish("guppy")
+	main.buy_fish("guppy", FishController.Sex.MALE)
+	main.buy_fish("guppy", FishController.Sex.FEMALE)
 	print("start cash=%d" % EconomyManager.cash)
 
 	var feeds := 0

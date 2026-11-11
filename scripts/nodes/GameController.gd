@@ -32,6 +32,7 @@ var tank_panel: TankInfoPanel
 var guide: GuidePanel
 var settings: SettingsPanel
 var welcome: WelcomePanel
+var fish_detail: FishDetailPanel
 var toast_view: ToastView
 
 ## Where the in-app update flow currently is — see UpdateChecker (autoload) for the actual
@@ -63,6 +64,7 @@ func _ready() -> void:
 	_show_welcome_on_start = not had_save
 
 	for tank in _tanks:
+		tank.game = self
 		tank.water_quality_alert.connect(_on_water_quality_alert)
 		tank.fish_born.connect(_on_fish_born)
 		tank.fish_died.connect(_on_fish_died)
@@ -114,7 +116,8 @@ func _build_ui() -> void:
 	guide = GuidePanel.new()
 	settings = SettingsPanel.new()
 	welcome = WelcomePanel.new()
-	for panel in [shop, fish_panel, tank_panel, guide, settings, welcome]:
+	fish_detail = FishDetailPanel.new()
+	for panel in [shop, fish_panel, tank_panel, guide, settings, welcome, fish_detail]:
 		panel.game = self
 		ui_root.add_child(panel)
 
@@ -158,9 +161,29 @@ func start_game() -> void:
 
 
 func close_panels() -> void:
+	for panel in [shop, fish_panel, tank_panel, guide, settings, welcome, fish_detail]:
+		if panel != null and panel.visible:
+			panel.close()
+
+
+## Tapping a fish directly in the tank (TankController._unhandled_input) opens this card —
+## does NOT pause or leave the tank, so the player can keep tapping around while it's up.
+func open_fish_detail(fish: FishController) -> void:
 	for panel in [shop, fish_panel, tank_panel, guide, settings, welcome]:
 		if panel != null and panel.visible:
 			panel.close()
+	fish_detail.inspect(fish)
+	fish_detail.open()
+
+
+## Sells exactly this fish (the detail card's sell button) rather than "the least healthy one
+## of this species" (sell_one_of) — the player can now tell them apart, so let them choose.
+func sell_specific_fish(fish: FishController) -> int:
+	var value := current_tank().sell_fish(fish)
+	AudioManager.play("cash")
+	toast(Localization.t("toast_sold", [fish.fish_name, value]), "good")
+	state_changed.emit()
+	return value
 
 
 ## tab < 0 = the fish tab that matches the tank on screen.
@@ -405,7 +428,9 @@ func _on_buy_fish(species_id: String) -> void:
 	buy_fish(species_id)
 
 
-func buy_fish(species_id: String) -> bool:
+## `sex`: FishController.Sex.MALE/FEMALE to buy a specific one (the shop's ♂/♀ toggle), or -1
+## for a random one (dev tools, and anything not written against the sex system).
+func buy_fish(species_id: String, sex: int = -1) -> bool:
 	var species := ShopManager.get_species(species_id)
 	if species == null:
 		return false
@@ -416,9 +441,9 @@ func buy_fish(species_id: String) -> bool:
 	if not EconomyManager.spend(species.base_price, "Bought %s" % species.display_name):
 		toast(Localization.t("alert_not_enough_cash"), "bad")
 		return false
-	current_tank().add_fish(species, false)
+	var fish := current_tank().add_fish(species, false, sex)
 	AudioManager.play("coin")
-	toast(Localization.t("toast_bought", [Localization.t("sp_%s" % species_id)]), "good")
+	toast(Localization.t("toast_bought_named", [fish.fish_name, Localization.t("sp_%s" % species_id)]), "good")
 	state_changed.emit()
 	return true
 
@@ -589,12 +614,19 @@ func current_tip() -> Dictionary:
 	if tank.stocking_fraction() > 0.9:
 		return {"text": Localization.t("tip_crowded"), "action": open_fish_panel, "kind": "warn"}
 
+	## species -> {"male": count, "female": count} of non-fry adults, for the breeding-pair tip.
 	var adults_by_species: Dictionary = {}
 	for fish in fish_list:
-		if not fish.is_fry:
-			adults_by_species[fish.species] = adults_by_species.get(fish.species, 0) + 1
+		if fish.is_fry:
+			continue
+		if not adults_by_species.has(fish.species):
+			adults_by_species[fish.species] = {"male": 0, "female": 0}
+		var key := "male" if fish.sex == FishController.Sex.MALE else "female"
+		adults_by_species[fish.species][key] += 1
 	for species in adults_by_species.keys():
-		if species.fry_per_batch_max > 0 and species.pair_required and adults_by_species[species] == 1:
+		var counts: Dictionary = adults_by_species[species]
+		if species.fry_per_batch_max > 0 and (counts["male"] == 0) != (counts["female"] == 0):
+			## Exactly one sex present (the other is zero) — breeding is blocked on the missing one.
 			return {"text": Localization.t("tip_need_pair", [Localization.t("sp_%s" % species.id)]), "action": to_shop_fish, "kind": "info"}
 	for species in adults_by_species.keys():
 		if species.schooling_min_group > 1 and _count_species(fish_list, species) < species.schooling_min_group:
@@ -638,8 +670,9 @@ func _on_fish_born(species: FishSpeciesData, count: int) -> void:
 	state_changed.emit()
 
 
-func _on_fish_died(species: FishSpeciesData) -> void:
-	toast(Localization.t("toast_died", [Localization.t("sp_%s" % species.id)]), "bad")
+func _on_fish_died(species: FishSpeciesData, fish_name: String, reason: String) -> void:
+	var key := "toast_died_old_age" if reason == "old_age" else "toast_died"
+	toast(Localization.t(key, [fish_name, Localization.t("sp_%s" % species.id)]), "info" if reason == "old_age" else "bad")
 	state_changed.emit()
 	_check_bailout.call_deferred()
 

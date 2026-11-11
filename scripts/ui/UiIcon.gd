@@ -89,5 +89,19 @@ func _draw() -> void:
 			draw_rect(Rect2(c + Vector2(-s * 0.42, -s * 0.28), Vector2(s * 0.84, s * 0.6)), color, false, w)
 			draw_line(c + Vector2(-s * 0.34, -s * 0.1), c + Vector2(s * 0.34, -s * 0.1), color, w * 0.6, true)
 			draw_circle(c + Vector2(-s * 0.08, s * 0.12), s * 0.08, color)
+		"male":
+			## Mars symbol: a circle with an arrow off the upper-right.
+			var ring_c := c + Vector2(-s * 0.08, s * 0.08)
+			draw_arc(ring_c, s * 0.26, 0.0, TAU, 24, color, w, true)
+			var arrow_tip := c + Vector2(s * 0.38, -s * 0.38)
+			draw_line(ring_c + Vector2(s * 0.18, -s * 0.18), arrow_tip, color, w, true)
+			draw_line(arrow_tip, arrow_tip + Vector2(-s * 0.18, 0), color, w, true)
+			draw_line(arrow_tip, arrow_tip + Vector2(0, s * 0.18), color, w, true)
+		"female":
+			## Venus symbol: a circle over a cross.
+			var circ_c := c + Vector2(0, -s * 0.12)
+			draw_arc(circ_c, s * 0.24, 0.0, TAU, 24, color, w, true)
+			draw_line(circ_c + Vector2(0, s * 0.24), c + Vector2(0, s * 0.42), color, w, true)
+			draw_line(c + Vector2(-s * 0.16, s * 0.33), c + Vector2(s * 0.16, s * 0.33), color, w, true)
 		_:
 			draw_circle(c, s * 0.3, color)

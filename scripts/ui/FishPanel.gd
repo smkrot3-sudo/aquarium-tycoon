@@ -42,15 +42,16 @@ func _process(delta: float) -> void:
 
 
 func _groups() -> Dictionary:
-	var groups: Dictionary = {}  ## species -> {adults, fry, health_sum, hungry, sick}
+	var groups: Dictionary = {}  ## species -> {adults, males, females, fry, health_sum, hungry, sick}
 	for fish in game.current_tank().get_fish():
 		if not groups.has(fish.species):
-			groups[fish.species] = {"adults": 0, "fry": 0, "health_sum": 0.0, "hungry": 0, "sick": 0}
+			groups[fish.species] = {"adults": 0, "males": 0, "females": 0, "fry": 0, "health_sum": 0.0, "hungry": 0, "sick": 0}
 		var g: Dictionary = groups[fish.species]
 		if fish.is_fry:
 			g["fry"] += 1
 		else:
 			g["adults"] += 1
+			g[("males" if fish.sex == FishController.Sex.MALE else "females")] += 1
 		g["health_sum"] += fish.health
 		if fish.hunger < 35.0:
 			g["hungry"] += 1
@@ -117,7 +118,7 @@ func _add_row(species: FishSpeciesData, g: Dictionary) -> void:
 	text.alignment = BoxContainer.ALIGNMENT_CENTER
 	row.add_child(text)
 	text.add_child(UiKit.label(Localization.t("sp_%s" % species.id), UiKit.FONT_HEADING, UiKit.COL_TEXT, true))
-	text.add_child(UiKit.label(Localization.t("fish_counts", [g["adults"], g["fry"]]), UiKit.FONT_BODY, UiKit.COL_ACCENT))
+	text.add_child(UiKit.label(Localization.t("fish_counts_sexed", [g["males"], g["females"], g["fry"]]), UiKit.FONT_BODY, UiKit.COL_ACCENT))
 
 	var total: int = g["adults"] + g["fry"]
 	var health: int = int(round(g["health_sum"] / maxf(1.0, float(total))))
@@ -131,7 +132,7 @@ func _add_row(species: FishSpeciesData, g: Dictionary) -> void:
 		note_color = UiKit.COL_BAD
 	if species.fry_per_batch_max <= 0:
 		notes.append(Localization.t("fish_no_breeding"))
-	elif species.pair_required and g["adults"] < 2:
+	elif g["males"] == 0 or g["females"] == 0:
 		notes.append(Localization.t("fish_needs_pair"))
 	text.add_child(UiKit.paragraph(" · ".join(notes), UiKit.FONT_SMALL, note_color, 2))
 

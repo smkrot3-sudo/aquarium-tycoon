@@ -53,6 +53,10 @@ const MAX_CHEMISTRY_SUBSTEPS := 240
 @export var air_stone: EquipmentData
 @export var has_test_kit: bool = false
 
+## Set by GameController._ready(); lets a direct tap on a fish (_unhandled_input below) open its
+## identity card. Never set in a dev tool that doesn't build the full UI — null-checked before use.
+var game: GameController
+
 var temperature: float = 24.0
 var ph: float = 7.0
 var gh: float = 10.0
@@ -98,7 +102,8 @@ var pending_egg_batches: Array = []
 ## and shouldn't own display text; GameController._on_water_quality_alert() does the lookup.
 signal water_quality_alert(message_key: String)
 signal fish_born(species: FishSpeciesData, count: int)
-signal fish_died(species: FishSpeciesData)
+## reason: "old_age" or "neglect" (FishController.death_reason) — lets the toast tell them apart.
+signal fish_died(species: FishSpeciesData, fish_name: String, reason: String)
 
 
 func _ready() -> void:
@@ -195,6 +200,21 @@ func _unhandled_input(event: InputEvent) -> void:
 		is_tap = true
 	if not is_tap or not _view_rect.has_point(point):
 		return
+
+	## A tap that lands ON a fish (within its own drawn size) opens its identity card instead of
+	## startling the tank — the closest one wins if a few overlap.
+	if game != null:
+		var closest: FishController = null
+		var closest_dist := INF
+		for fish in get_fish():
+			var dist := fish.position.distance_to(point)
+			if dist < fish.tap_radius() and dist < closest_dist:
+				closest = fish
+				closest_dist = dist
+		if closest != null:
+			game.open_fish_detail(closest)
+			return
+
 	for fish in get_fish():
 		if fish.position.distance_to(point) < 220.0:
 			fish.startle(point)
@@ -614,16 +634,17 @@ func perform_water_change(fraction: float = 0.25) -> void:
 	days_since_water_change = 0.0
 
 
-func add_fish(species: FishSpeciesData, is_fry: bool = false) -> FishController:
+## `forced_sex` lets the shop buy a specific sex (-1 = random, used for bred fry and dev tools).
+func add_fish(species: FishSpeciesData, is_fry: bool = false, forced_sex: int = -1) -> FishController:
 	var fish: FishController = FISH_SCENE.instantiate()
 	add_child(fish)
-	fish.setup(species, is_fry)
+	fish.setup(species, is_fry, forced_sex)
 	fish.died.connect(_on_fish_died)
 	return fish
 
 
 func _on_fish_died(fish: FishController) -> void:
-	fish_died.emit(fish.species)
+	fish_died.emit(fish.species, fish.fish_name, fish.death_reason)
 
 
 func sell_fish(fish: FishController) -> int:

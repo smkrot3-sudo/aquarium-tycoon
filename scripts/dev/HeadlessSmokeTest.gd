@@ -17,8 +17,10 @@ func _ready() -> void:
 	print("=== After buying heater+filter+light ===")
 	print("Cash: ", EconomyManager.cash)
 
-	main._on_buy_fish("guppy")
-	main._on_buy_fish("guppy")
+	## Explicit male+female so breeding is deterministic to watch in this log (buy_fish's
+	## default is a random sex, which would make "should have produced fry" a coin flip).
+	main.buy_fish("guppy", FishController.Sex.MALE)
+	main.buy_fish("guppy", FishController.Sex.FEMALE)
 	main._on_buy_fish("cherry_shrimp")
 	print("=== After buying 2 guppies + 1 shrimp ===")
 	print("Cash: ", EconomyManager.cash, " | Fish count: ", main.current_tank().get_fish().size())
@@ -91,7 +93,7 @@ func _ready() -> void:
 	main._on_buy_tank("marine_reef_tank")
 	print("Tank 2 locked=%s type=%d liters=%.1f | selected index after buy=%d" % [main._tanks[1].locked, main._tanks[1].tank_type, main._tanks[1].tank_liters, main._current_tank_index])
 
-	main._on_buy_fish("guppy")
+	main.buy_fish("guppy", FishController.Sex.FEMALE)
 	if main.current_tank().get_fish().size() > 0:
 		print("BUG: freshwater guppy was allowed into the saltwater tank")
 	else:

@@ -18,11 +18,24 @@ uniform float bend = 0.0;                                 // whole-body curve wh
 uniform float margin : hint_range(0.0, 0.3) = 0.12;
 uniform float breathe = 0.0;                              // 0..1 gentle pulsing of the body height
 uniform float upright = 0.0;                              // 1 = seahorse-like: sway instead of wave
+uniform float hue_shift = 0.0;                            // -1..1, this individual's own color variety
 
 varying vec4 tint;
 
 void vertex() {
 	tint = COLOR;
+}
+
+// Rotates a color around the gray axis (1,1,1) in RGB space by `turns` full turns — the
+// Rodrigues' rotation formula applied to color instead of HSV, so shading/highlights (which
+// stay gray) are untouched and only the chroma spins. Cheaper and branch-free vs. an RGB<->HSV
+// round trip for what's just one scalar rotation.
+vec3 rotate_hue(vec3 color, float turns) {
+	const vec3 axis = vec3(0.57735027, 0.57735027, 0.57735027);
+	float angle = turns * 6.2831853;
+	float c = cos(angle);
+	float s = sin(angle);
+	return clamp(color * c + cross(axis, color) * s + axis * dot(axis, color) * (1.0 - c), 0.0, 1.0);
 }
 
 void fragment() {
@@ -48,6 +61,9 @@ void fragment() {
 	vec4 color = vec4(0.0);
 	if (sample_uv.x >= 0.0 && sample_uv.x <= 1.0 && sample_uv.y >= 0.0 && sample_uv.y <= 1.0) {
 		color = texture(TEXTURE, sample_uv);
+	}
+	if (hue_shift != 0.0) {
+		color.rgb = rotate_hue(color.rgb, hue_shift);
 	}
 	COLOR = color * tint;
 }

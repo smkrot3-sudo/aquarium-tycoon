@@ -31,6 +31,7 @@ maturity_age_sim_days = 90.0
 lifespan_sim_days = 1460.0
 is_livebearer = true
 pair_required = true
+dimorphic = true
 breeding_cooldown_sim_days = 30.0
 fry_per_batch_min = 20
 fry_per_batch_max = 60

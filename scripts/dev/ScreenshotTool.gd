@@ -34,8 +34,8 @@ func _ready() -> void:
 	_main.open_shop(ShopPanel.Tab.SALT)
 	await _settle(10)
 	await _shot("06_shop_fish_salt_locked_tank")
-	_main.buy_fish("guppy")
-	_main.buy_fish("guppy")
+	_main.buy_fish("guppy", FishController.Sex.MALE)
+	_main.buy_fish("guppy", FishController.Sex.FEMALE)
 	_main.buy_fish("cherry_shrimp")
 	_main.open_shop(ShopPanel.Tab.FRESH)
 	await _settle(10)
@@ -55,6 +55,13 @@ func _ready() -> void:
 			_main.feed(true)
 	await _settle(150)
 	await _shot("09_hud_with_fish")
+
+	var tank := _main.current_tank()
+	if not tank.get_fish().is_empty():
+		_main.open_fish_detail(tank.get_fish()[0])
+		await _settle(10)
+		await _shot("09b_fish_identity_card")
+		_main.close_panels()
 
 	_main.open_fish_panel()
 	await _settle(10)

@@ -56,11 +56,24 @@ enum Temperament { PEACEFUL, SEMI_AGGRESSIVE, AGGRESSIVE }
 ## Egg-layers (is_livebearer = false) instead lay a batch that sits in the tank for
 ## egg_incubation_sim_days before hatching into fry (see TankController.schedule_egg_batch).
 @export var is_livebearer: bool = true
+## Every fish has a sex (FishController.Sex) and breeding always needs one of each — this only
+## gates whether a *second* same-species adult is required on top of that (a shoal spawner can
+## in principle have its one male and one female be the only two fish of their kind; it still
+## needs both). True for every species that actually breeds in this game.
 @export var pair_required: bool = true
 @export var breeding_cooldown_sim_days: float = 20.0
 @export var fry_per_batch_min: int = 5
 @export var fry_per_batch_max: int = 20
 @export var egg_incubation_sim_days: float = 0.0
+
+@export_group("Individuality")
+## Males and females are drawn with a visibly different size/vividness (FishController) — real
+## for livebearers (platy/molly/guppy/swordtail: males smaller and flashier, females larger and
+## plainer) and for betta (the showy fins/color are specifically a male trait).
+@export var dimorphic: bool = false
+## Each individual gets its own small random hue shift — real individual-to-individual variety
+## in these species is part of what makes keeping them fun (guppy strains, betta colors).
+@export var color_variable: bool = false
 
 @export_group("Economy")
 @export var base_price: int = 10

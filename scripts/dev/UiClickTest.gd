@@ -36,10 +36,40 @@ func _ready() -> void:
 	await _tap_card_buy("בטא (דג קרב)")
 	_check("Tapping the betta card ($12, affordable) adds a betta", _main.count_fish("betta", false) == 1)
 
+	await _tap_card_sex_toggle("פלאטי", true)
+	await _tap_card_buy("פלאטי")
+	var bought_female := false
+	for fish in tank.get_fish():
+		if fish.species.id == "platy":
+			bought_female = fish.sex == FishController.Sex.FEMALE
+	_check("Picking ♀ on a card and buying gets a female", bought_female)
+
 	await _tap_text("דגי מים מלוחים")
 	_check("Saltwater tab shows the switch-tank banner (freshwater tank on screen)", _main.shop._banner.visible)
 	await _tap_icon(_main.shop, "close")
 	_check("Close button closes the shop", not _main.shop.visible)
+
+	var a_guppy: FishController = null
+	for fish in tank.get_fish():
+		if fish.species.id == "guppy":
+			a_guppy = fish
+			break
+	if a_guppy != null:
+		var guppy_name := a_guppy.fish_name
+		var event := InputEventMouseButton.new()
+		event.button_index = MOUSE_BUTTON_LEFT
+		event.position = a_guppy.position
+		event.global_position = a_guppy.position
+		event.pressed = true
+		get_viewport().push_input(event, true)
+		await _frames(6)
+		event.pressed = false
+		get_viewport().push_input(event, true)
+		await _frames(6)
+		_check("Tapping a fish in the tank opens its identity card", _main.fish_detail.visible and _main.fish_detail.title_text == guppy_name)
+		_check("The card shows the species name", Localization.t("sp_guppy") in _get_all_text(_main.fish_detail))
+		await _tap_icon(_main.fish_detail, "close")
+		_check("Closing the identity card returns to the tank", not _main.fish_detail.visible)
 
 	for fish in tank.get_fish():
 		fish.hunger = 10.0
@@ -80,9 +110,15 @@ func _ready() -> void:
 	_check("Bottom-bar Shop opens the shop", _main.shop.visible)
 	await _tap_icon(_main.shop, "close")
 
+	## Force "feed" to be the top coach-line tip (it's outranked by a sick fish or dirty water,
+	## either of which a long enough test run can randomly roll along the way).
 	tank.ammonia = 0.0
+	tank.nitrite = 0.0
+	tank.nitrate = 0.0
+	tank.medication_remaining_days = 0.0
 	for fish in tank.get_fish():
 		fish.hunger = 10.0
+		fish.is_sick = false
 	await _frames(30)
 	await _tap_node(_main.hud._tip_button)
 	_check("Tapping the coach line performs its action (feed)", tank.get_fish()[0].hunger > 40.0)
@@ -194,7 +230,28 @@ func _tap_card_buy(title: String) -> void:
 		_failures += 1
 		print("[FAIL] card '%s' has no button" % title)
 		return
-	await _tap_node(buttons[0])
+	## Fish cards put a ♂/♀ pick before the actual buy button (ShopPanel._add_fish_card), so the
+	## buy/sell button is the LAST one in the row, not the first (equipment/tank cards and the
+	## guide album only ever have the one button, so "last" is still correct there too).
+	await _tap_node(buttons[-1])
+
+
+## Taps a fish card's ♂ (female=false) or ♀ (female=true) toggle without buying — the two
+## toggle buttons are whatever _tap_card_buy finds before the buy button itself (index 0/1).
+func _tap_card_sex_toggle(title: String, female: bool) -> void:
+	var label := _find_label(_main.ui_root, title)
+	if label == null:
+		_failures += 1
+		print("[FAIL] no visible card titled '%s'" % title)
+		return
+	var row: Node = label.get_parent().get_parent()
+	await _scroll_into_view(row)
+	var buttons := _find_all_buttons(row)
+	if buttons.size() < 3:
+		_failures += 1
+		print("[FAIL] card '%s' has no sex toggle" % title)
+		return
+	await _tap_node(buttons[1 if female else 0])
 
 
 func _get_all_text(node: Node) -> String:

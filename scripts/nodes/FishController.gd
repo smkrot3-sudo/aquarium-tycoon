@@ -1,13 +1,20 @@
 extends Node2D
 class_name FishController
-## One fish instance: its simulation state (hunger / stress / health / growth / breeding — see
-## plan "Core simulation model") and its on-screen life. The second half of this file is purely
-## cosmetic and never feeds back into the simulation.
+## One fish instance: its simulation state (hunger / stress / health / growth / breeding / sex /
+## identity / aging — see plan "Core simulation model") and its on-screen life. The second half
+## of this file is purely cosmetic and never feeds back into the simulation.
 ##
 ## Animation, in short: the sprite is drawn through shaders/fish_swim.gdshader, which bends the
 ## picture with a travelling wave so the tail really beats; this script drives that wave from
 ## how the fish is moving (burst-and-glide swimming, harder tail beats when accelerating, a body
 ## curve while turning), and gives each kind of animal its own way of getting about — see STYLES.
+##
+## Identity: every fish is born male or female (FishController.Sex), gets a given name from
+## FishNames, and breeding genuinely needs one of each (see _find_partner) — buying "2 guppies"
+## no longer breeds on its own unless one of each sex was bought. Species flagged `dimorphic`
+## draw males and females at a different size/vividness (real for livebearers and betta);
+## species flagged `color_variable` give each individual its own small random hue, so a tankful
+## of guppies doesn't look like identical copies.
 
 const MAX_FRY_PER_BATCH_SPAWNED := 8  ## safety cap so a big offline catch-up can't flood the tank
 const DISEASE_BASE_RISK_PER_DAY := 0.015
@@ -15,10 +22,21 @@ const DISEASE_HEALTH_PENALTY_PER_DAY := 4.0
 const DISEASE_UNTREATED_RECOVERY_PER_DAY := 0.04
 const HUNGER_LOSS_PER_HOUR := 1.0
 
+enum Sex { MALE, FEMALE }
+
 ## How big sprites are drawn relative to FishVisualBuilder2D.display_length().
 const VISUAL_SCALE := 2.8
 ## Fry are drawn at this fraction of full size, growing linearly to 1.0 at max_size_cm.
 const MIN_SIZE_SCALE := 0.28
+## Dimorphic species only: males read as the smaller, showier sex; females as the larger, plainer
+## one — true to life for the livebearers/betta this is actually set on.
+const MALE_SCALE := 0.84
+const FEMALE_SCALE := 1.14
+const MALE_TINT := Color(1.08, 1.0, 0.94)
+const FEMALE_TINT := Color(0.86, 0.9, 0.96)
+## Color-variable species: how far an individual's hue can wander from the species' reference
+## color — enough to look like a different strain, not so much it reads as a different fish.
+const HUE_VARIETY := 0.16
 
 ## How each kind of animal moves. speed = cruising px/s range; pause = seconds it lingers
 ## between swims; burst = speed multiplier while actively kicking (it then glides at ~half);
@@ -45,8 +63,17 @@ var stress: float = 0.0        ## 0..100, 0 = calm
 var health: float = 100.0      ## 0..100
 var size_cm: float = 1.0
 var age_sim_days: float = 0.0
+## Separate from age: resets to 0 every time this exact fish is added to a tank (a bought adult
+## is already grown, but it hasn't been YOUR fish for very long) — what "Tap a fish" shows.
+var days_in_tank: float = 0.0
 var breeding_cooldown_remaining: float = 0.0
 var is_sick: bool = false      ## generic illness; see FishController.simulate_hours disease roll
+
+var sex: Sex = Sex.MALE
+var fish_name: String = ""
+## "" (alive), "old_age" or "neglect" — set just before `died` fires, so listeners can tell
+## a natural end from a preventable one without guessing from the stats.
+var death_reason: String = ""
 
 signal died(fish: FishController)
 
@@ -61,6 +88,8 @@ var _depth: float = 1.0          ## 0 = far back (smaller, bluer), 1 = right at 
 var _phase: float = randf() * TAU
 var _amplitude: float = 0.0
 var _bend: float = 0.0
+var _dimorph_scale: float = 1.0
+var _dimorph_tint: Color = Color.WHITE
 
 var _target: Vector2 = Vector2.ZERO
 var _velocity: Vector2 = Vector2.ZERO
@@ -77,16 +106,28 @@ var _gulp_in: float = randf_range(8.0, 26.0)  ## labyrinth fish: seconds until t
 var _gulp_state: int = 0         ## 0 = no, 1 = rising to the surface, 2 = heading back down
 
 
-func setup(fish_species: FishSpeciesData, as_fry: bool = false) -> void:
+## `forced_sex` lets the shop buy a specific sex (-1 = random, used for bred fry).
+func setup(fish_species: FishSpeciesData, as_fry: bool = false, forced_sex: int = -1) -> void:
 	species = fish_species
 	is_fry = as_fry
 	size_cm = species.max_size_cm * (0.15 if as_fry else 0.6)
 	age_sim_days = 0.0 if as_fry else Economy.maturity_days(species)
+	days_in_tank = 0.0
 	hunger = 80.0
 	stress = 0.0
 	health = 100.0
 	is_sick = false
+	death_reason = ""
 	breeding_cooldown_remaining = Economy.breeding_cooldown_days(species) * 0.5
+
+	sex = (forced_sex as Sex) if forced_sex >= 0 else (Sex.MALE if randf() < 0.5 else Sex.FEMALE)
+	fish_name = FishNames.pick(sex, Localization.current_language)
+	if species.dimorphic:
+		_dimorph_scale = MALE_SCALE if sex == Sex.MALE else FEMALE_SCALE
+		_dimorph_tint = MALE_TINT if sex == Sex.MALE else FEMALE_TINT
+	else:
+		_dimorph_scale = 1.0
+		_dimorph_tint = Color.WHITE
 
 	_style_id = _resolve_style(species)
 	_style = STYLES[_style_id]
@@ -106,6 +147,8 @@ func setup(fish_species: FishSpeciesData, as_fry: bool = false) -> void:
 		_material.set_shader_parameter("stiff_head", _style["stiff"])
 		_material.set_shader_parameter("upright", 1.0 if _style_id == "seahorse" else 0.0)
 		_material.set_shader_parameter("breathe", 0.0 if _style_id in ["crawler", "snail"] else 1.0)
+		if species.color_variable:
+			_material.set_shader_parameter("hue_shift", randf_range(-HUE_VARIETY, HUE_VARIETY))
 	if _style_id in FLOOR_STYLES:
 		_shadow = _make_shadow()
 		add_child(_shadow)
@@ -152,11 +195,16 @@ func _apply_scale() -> void:
 	if _visual_root == null:
 		return
 	var ratio: float = clampf(size_cm / maxf(species.max_size_cm, 0.01), 0.0, 1.0)
-	_base_scale = VISUAL_SCALE * lerpf(MIN_SIZE_SCALE, 1.0, ratio) * lerpf(0.84, 1.0, _depth)
+	_base_scale = VISUAL_SCALE * lerpf(MIN_SIZE_SCALE, 1.0, ratio) * lerpf(0.84, 1.0, _depth) * _dimorph_scale
 	if _shadow != null:
 		var half_height: float = float(_visual_root.get_meta("half_height", 12.0)) * _base_scale
 		_shadow.position = Vector2(0.0, half_height * 0.78)
 		_shadow.scale = Vector2.ONE * _base_scale * FishVisualBuilder2D.display_length(species) / 70.0
+
+
+## On-screen hit radius for tap-to-inspect (TankController._unhandled_input), in px.
+func tap_radius() -> float:
+	return maxf(26.0, FishVisualBuilder2D.display_length(species) * _base_scale * 0.6)
 
 
 # ----------------------------------------------------------------------------------------
@@ -334,7 +382,7 @@ func _process(delta: float) -> void:
 	_visual_root.position.y = lift
 	_visual_root.rotation = tilt * signf(face)
 
-	var tint := Color.WHITE.lerp(Color(0.6, 0.8, 0.94), (1.0 - _depth) * 0.42)
+	var tint := Color.WHITE.lerp(Color(0.6, 0.8, 0.94), (1.0 - _depth) * 0.42) * _dimorph_tint
 	if is_sick:
 		tint = tint * Color(0.74, 0.84, 0.66)
 	_visual_root.modulate = tint
@@ -374,6 +422,15 @@ func _finish_air_gulp() -> void:
 func simulate_hours(hours: float, tank: TankController) -> void:
 	var days := hours / 24.0
 	age_sim_days += days
+	days_in_tank += days
+
+	## Old age: a fry that just hatched doesn't count its ancestors' years, so this only ever
+	## ends a fish that lived out its (pace-scaled) natural span in THIS tank.
+	if age_sim_days >= Economy.lifespan_days(species):
+		death_reason = "old_age"
+		died.emit(self)
+		queue_free()
+		return
 
 	hunger = max(0.0, hunger - HUNGER_LOSS_PER_HOUR * hours)
 
@@ -419,6 +476,7 @@ func simulate_hours(hours: float, tank: TankController) -> void:
 	if health < 1.0 and tank.is_catching_up:
 		health = 5.0
 	if health < 1.0:
+		death_reason = "neglect"
 		died.emit(self)
 		queue_free()
 		return
@@ -470,6 +528,10 @@ func _update_disease(days: float, tank: TankController) -> void:
 func _update_breeding(days: float, in_tolerance: bool, tank: TankController) -> void:
 	if is_fry or is_sick or species.fry_per_batch_max <= 0:
 		return
+	## Only a female carries fry/eggs — a male reaching his own cooldown-zero does nothing
+	## until _find_partner (called from the female's turn) resets him.
+	if sex != Sex.FEMALE:
+		return
 	breeding_cooldown_remaining = max(0.0, breeding_cooldown_remaining - days)
 	if breeding_cooldown_remaining > 0.0:
 		return
@@ -477,24 +539,22 @@ func _update_breeding(days: float, in_tolerance: bool, tank: TankController) -> 
 		return
 	if tank.stocking_fraction() >= Economy.BREEDING_STOCKING_LIMIT:
 		return
-	var partner: FishController = null
-	if species.pair_required:
-		partner = _find_partner(tank)
-		if partner == null:
-			return
+	var partner: FishController = _find_partner(tank)
+	if partner == null:
+		return
 	if species.is_livebearer:
 		_breed_livebearer(tank)
 	else:
 		_breed_egg_layer(tank)
-	## One batch per pair: the partner's clock restarts too, otherwise two guppies would each
-	## drop a full batch every cycle and the tank would flood.
-	if partner != null:
-		partner.breeding_cooldown_remaining = Economy.breeding_cooldown_days(species)
+	## One batch per pair: the male's clock restarts too, otherwise he could father a batch
+	## with every female in the tank on the same day.
+	partner.breeding_cooldown_remaining = Economy.breeding_cooldown_days(species)
 
 
+## A ready, healthy adult MALE of the same species — real breeding, not just "another adult".
 func _find_partner(tank: TankController) -> FishController:
 	for fish in tank.get_fish():
-		if fish != self and fish.species == species and not fish.is_fry and not fish.is_sick:
+		if fish != self and fish.species == species and fish.sex == Sex.MALE and not fish.is_fry and not fish.is_sick and fish.health >= 50.0:
 			return fish
 	return null
 
@@ -531,9 +591,10 @@ func to_save_dict() -> Dictionary:
 	return {
 		"species_id": species.id, "is_fry": is_fry,
 		"hunger": hunger, "stress": stress, "health": health,
-		"size_cm": size_cm, "age_sim_days": age_sim_days,
+		"size_cm": size_cm, "age_sim_days": age_sim_days, "days_in_tank": days_in_tank,
 		"breeding_cooldown_remaining": breeding_cooldown_remaining,
-		"is_sick": is_sick,
+		"is_sick": is_sick, "sex": sex, "fish_name": fish_name,
+		"hue_shift": _material.get_shader_parameter("hue_shift") if _material != null else 0.0,
 	}
 
 
@@ -544,8 +605,16 @@ func from_save_dict(d: Dictionary) -> void:
 	health = d.get("health", 100.0)
 	size_cm = d.get("size_cm", size_cm)
 	age_sim_days = d.get("age_sim_days", 0.0)
+	days_in_tank = d.get("days_in_tank", age_sim_days)
 	## Clamp so saves written under the old (much longer) breeding clock don't leave fish
 	## waiting weeks of sim time for their first batch.
 	breeding_cooldown_remaining = minf(d.get("breeding_cooldown_remaining", 0.0), Economy.breeding_cooldown_days(species))
 	is_sick = d.get("is_sick", false)
+	sex = int(d.get("sex", sex)) as Sex
+	fish_name = d.get("fish_name", fish_name if fish_name != "" else FishNames.pick(sex, Localization.current_language))
+	if species.dimorphic:
+		_dimorph_scale = MALE_SCALE if sex == Sex.MALE else FEMALE_SCALE
+		_dimorph_tint = MALE_TINT if sex == Sex.MALE else FEMALE_TINT
+	if _material != null:
+		_material.set_shader_parameter("hue_shift", d.get("hue_shift", 0.0))
 	_apply_scale()
