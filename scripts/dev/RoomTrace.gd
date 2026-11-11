@@ -151,6 +151,49 @@ func _ready() -> void:
 	await get_tree().process_frame
 	_check("The only tank can't be sold", main.owned_tank_count() == 2 and main.sell_tank(2) and not main.sell_tank(0))
 
+	# --- Android's back button steps back inside the game instead of quitting
+	main.open_shop(ShopPanel.Tab.FRESH)
+	main.notification(Node.NOTIFICATION_WM_GO_BACK_REQUEST)
+	_check("Back closes an open panel", not main.shop.visible)
+	main.set_tool(TankController.Tool.SCRAPER)
+	main.notification(Node.NOTIFICATION_WM_GO_BACK_REQUEST)
+	_check("...then puts the tool away", main.tool == TankController.Tool.HAND)
+	main.notification(Node.NOTIFICATION_WM_GO_BACK_REQUEST)
+	_check("...then goes to the home screen, never quitting", main.home.visible and not get_tree().is_queued_for_deletion())
+	main.start_game()
+
+	# --- tapping a tank in the room focuses on it, pinching zooms, double tap zooms in
+	EconomyManager.earn(500, "test")
+	main.buy_tank("tank_25")
+	main.select_tank(0)
+	await get_tree().process_frame
+	_check("The room has two tanks for the camera checks", main.owned_tank_count() >= 2)
+	if main.owned_tank_count() >= 2:
+		var other := -1
+		for i in range(main.tanks().size()):
+			if not main.tanks()[i].locked and i != main.current_tank_index():
+				other = i
+				break
+		var other_tank: TankController = main.tanks()[other]
+		main.room.set_zoom(RoomView.Zoom.OVERVIEW)
+		var stand_point: Vector2 = other_tank.to_global(Vector2(other_tank._view_rect.size.x * 0.5, other_tank.floor_local_y() - 30.0))
+		main.room._on_tap(stand_point)
+		_check("Tapping another tank's stand focuses on that tank", main.current_tank_index() == other and main.room.zoom_mode == RoomView.Zoom.FOCUS)
+		main.room._zoom_by(1.8)
+		main.room._process(0.016)
+		var pinched: float = main.room._target_scale
+		main.room.set_zoom(RoomView.Zoom.FOCUS)
+		main.room._process(0.016)
+		_check("Pinching zooms in, and changing the view resets it", pinched > main.room._target_scale * 1.5)
+		var water_point: Vector2 = other_tank.to_global(other_tank._view_rect.get_center())
+		main.room._on_tap(water_point)
+		main.room._on_tap(water_point)
+		_check("A double tap zooms in", main.room.zoom_mode == RoomView.Zoom.CLOSE)
+		main.room._last_tap_msec = 0
+		main.room._on_tap(water_point)
+		main.room._on_tap(water_point)
+		_check("...and another zooms back out", main.room.zoom_mode == RoomView.Zoom.FOCUS)
+
 	# --- males and females are drawn differently
 	var test_tank: TankController = main.tanks()[0]
 	var f_guppy := test_tank.add_fish(ShopManager.get_species("guppy"), false, FishController.Sex.FEMALE)

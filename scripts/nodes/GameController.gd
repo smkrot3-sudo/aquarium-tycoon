@@ -56,6 +56,28 @@ var _known_level: int = 1
 var _alert_last_shown: Dictionary = {}  ## message key -> Time.get_ticks_msec() of last toast
 
 
+## Android's back button / edge-swipe gesture. It used to quit the game on the spot, without
+## saving — easy to trigger by accident in a landscape game. Now it steps back inside the game
+## (close a panel, put the tool away, zoom back out, then to the home screen) and never quits.
+func _notification(what: int) -> void:
+	if what != NOTIFICATION_WM_GO_BACK_REQUEST:
+		return
+	ErrorLog.crumb("back button")
+	for panel in _all_panels():
+		if panel != null and panel.visible:
+			close_panels()
+			return
+	if home != null and home.visible:
+		return
+	if tool != TankController.Tool.HAND:
+		set_tool(TankController.Tool.HAND)
+		return
+	if room.zoom_mode != RoomView.Zoom.FOCUS:
+		room.set_zoom(RoomView.Zoom.FOCUS)
+		return
+	go_home()
+
+
 func current_tank() -> TankController:
 	return _tanks[_current_tank_index]
 

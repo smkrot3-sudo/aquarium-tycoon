@@ -9,7 +9,7 @@ const SAVE_PATH := SAVE_DIR + "slot_1.json"
 const TEMP_PATH := SAVE_DIR + "slot_1.tmp"
 const BACKUP_PATH := SAVE_DIR + "slot_1.bak"
 const CORRUPT_PATH := SAVE_DIR + "slot_1.corrupt"
-const AUTOSAVE_INTERVAL_SEC := 60.0
+const AUTOSAVE_INTERVAL_SEC := 20.0
 
 ## Nothing is written until the game has loaded (or decided there is nothing to load). A save
 ## triggered by the app being paused or losing focus during start-up used to be able to
@@ -29,7 +29,7 @@ func _ready() -> void:
 
 
 func _notification(what: int) -> void:
-	if what == NOTIFICATION_APPLICATION_PAUSED or what == NOTIFICATION_APPLICATION_FOCUS_OUT or what == NOTIFICATION_WM_CLOSE_REQUEST:
+	if what == NOTIFICATION_APPLICATION_PAUSED or what == NOTIFICATION_APPLICATION_FOCUS_OUT or what == NOTIFICATION_WM_CLOSE_REQUEST or what == NOTIFICATION_WM_GO_BACK_REQUEST:
 		save_game()
 
 
@@ -48,6 +48,10 @@ func has_save() -> bool:
 ## half-written save behind (which loaded as "nothing" and was then overwritten by a new game).
 func save_game() -> void:
 	if not saving_enabled:
+		return
+	## While the game is shutting down the tanks may already be gone; a save without them would
+	## wipe the player's aquariums.
+	if get_tree().get_nodes_in_group("tank_nodes").is_empty():
 		return
 	var data := {
 		"schema_version": SCHEMA_VERSION,

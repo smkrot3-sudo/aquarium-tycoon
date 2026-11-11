@@ -39,6 +39,10 @@ func _ready() -> void:
 		main.feed(true)
 		if day % 3 == 2:
 			main.water_change()
+		## This checks the pairing rule, not luck with disease: keep the pair well.
+		for fish in tank.get_fish():
+			fish.is_sick = false
+			fish.health = maxf(fish.health, 80.0)
 	_check("A male+female pair breeds", tank.get_fish().size() > 2)
 
 	# --- every fish got a distinct name, and the sexes it asked for

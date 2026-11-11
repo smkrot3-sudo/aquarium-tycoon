@@ -26,13 +26,6 @@ const BACKGROUND := {
 	TankType.FRESHWATER: "res://assets/backgrounds/freshwater.jpg",
 	TankType.SALTWATER: "res://assets/backgrounds/marine.jpg",
 }
-## Which illustrated icon stands in for each equipment id inside the tank (tier variants share
-## their base tier's art).
-const EQUIPMENT_SPRITE := {
-	"basic_heater": "heater", "pro_heater": "heater",
-	"basic_filter": "filter", "canister_filter": "filter", "protein_skimmer": "protein_skimmer",
-	"air_stone": "air_stone", "powerhead": "powerhead",
-}
 
 ## Screen space the HUD keeps for itself (see scripts/ui/Hud.gd): a floating top bar and a
 ## docked, opaque bottom action bar. The room camera frames tanks between the two.
@@ -91,7 +84,8 @@ var active_events: Dictionary = {}
 var _background: Sprite2D
 var _shimmer: Polygon2D
 var _dim: Polygon2D
-var _equipment_layer: Node2D
+var _equipment_layer: EquipmentLayer2D
+var _equipment_above: EquipmentLayer2D
 var _bubbles: BubbleEffect2D
 var _food_layer: Node2D
 var _frame: TankFrame2D
@@ -509,54 +503,35 @@ func _rebuild_dim() -> void:
 
 
 ## Call after changing heater/filter/light/air_stone (GameController does on purchase/load).
+## The gear is drawn in place and to scale by EquipmentLayer2D: one layer in the water behind
+## the fish, one for the cables and pipes where they cross the rim.
 func refresh_equipment_visuals() -> void:
-	if _equipment_layer != null:
-		_equipment_layer.queue_free()
-	_equipment_layer = Node2D.new()
-	_equipment_layer.name = "Equipment"
-	add_child(_equipment_layer)
+	if _equipment_layer == null:
+		_equipment_layer = EquipmentLayer2D.new()
+		_equipment_layer.name = "Equipment"
+		_equipment_layer.tank = self
+		add_child(_equipment_layer)
+		_equipment_above = EquipmentLayer2D.new()
+		_equipment_above.name = "EquipmentAboveRim"
+		_equipment_above.tank = self
+		_equipment_above.above = true
+		_equipment_above.z_index = 9
+		add_child(_equipment_above)
 	move_child(_equipment_layer, mini(2, get_child_count() - 1))
+	_equipment_layer.queue_redraw()
+	_equipment_above.queue_redraw()
 
 	var r := _view_rect
-	var top := water_top_y() + 6.0
-	var eq_scale: float = clampf(r.size.y / 548.0, 0.45, 1.25)
-	if filter != null:
-		_add_equipment_sprite(filter.id, Vector2(r.end.x - r.size.x * 0.035, top), 150.0 * eq_scale, Vector2(1.0, 0.0))
-	if heater != null:
-		var heater_sprite := _add_equipment_sprite(heater.id, Vector2(r.position.x + r.size.x * 0.035, top + 10.0), 120.0 * eq_scale, Vector2(0.0, 0.0))
-		if heater_sprite != null and heater_failed:
-			heater_sprite.modulate = Color(0.45, 0.45, 0.5)
-	var bubble_x := -1.0
-	if air_stone != null:
-		bubble_x = r.position.x + r.size.x * 0.7
-		var stone_height := (70.0 if air_stone.id == "air_stone" else 62.0) * eq_scale
-		_add_equipment_sprite(air_stone.id, Vector2(bubble_x, _sand_top_y + 26.0 * eq_scale), stone_height, Vector2(0.5, 1.0))
-
 	if _bubbles != null:
 		_bubbles.queue_free()
 	_bubbles = BubbleEffect2D.new()
 	_bubbles.name = "Bubbles"
 	add_child(_bubbles)
-	_bubbles.setup(Rect2(r.position.x, water_top_y(), r.size.x, maxf(40.0, _sand_top_y - water_top_y())), bubble_x)
+	_bubbles.setup(Rect2(r.position.x, water_top_y(), r.size.x, maxf(40.0, _sand_top_y - water_top_y())), _equipment_layer.bubble_sources())
 	if _dim != null:
 		_dim.visible = light_equipment == null
-
-
-## `anchor` is the point of the sprite (0..1 in each axis) placed at `pos`.
-func _add_equipment_sprite(equipment_id: String, pos: Vector2, target_height: float, anchor: Vector2) -> Sprite2D:
-	var path := "res://assets/equipment/%s.png" % EQUIPMENT_SPRITE.get(equipment_id, equipment_id)
-	if not ResourceLoader.exists(path):
-		return null
-	var sprite := Sprite2D.new()
-	sprite.texture = load(path)
-	sprite.centered = false
-	sprite.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
-	var tex_size: Vector2 = sprite.texture.get_size()
-	var s: float = target_height / maxf(tex_size.y, 1.0)
-	sprite.scale = Vector2.ONE * s
-	sprite.position = pos - Vector2(tex_size.x * s * anchor.x, tex_size.y * s * anchor.y)
-	_equipment_layer.add_child(sprite)
-	return sprite
+	if _frame != null:
+		_frame.queue_redraw()
 
 
 ## Cosmetic: a pinch of flakes drifting down; fish rush up to it. With no `at` it falls from the
@@ -688,6 +663,8 @@ func simulate_hours(hours: float) -> void:
 	for fish in get_fish():
 		fish.simulate_hours(hours, self)
 
+	if _equipment_layer != null and heater != null:
+		_equipment_layer.queue_redraw()
 	if ammonia > WaterChemistry.AMMONIA_DANGER:
 		water_quality_alert.emit("alert_ammonia_danger")
 	if algae_level() >= 90.0 and not is_catching_up:

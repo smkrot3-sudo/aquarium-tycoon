@@ -30,6 +30,15 @@ var _tallest: float = 900.0
 var _redraw_timer: float = 0.0
 var _panning: bool = false
 var _pan_moved: float = 0.0
+## The player's own adjustments on top of the zoom mode: a pan (world px) and a pinch factor.
+## Both reset when the focused tank or the zoom mode changes.
+var _pan_offset: Vector2 = Vector2.ZERO
+var _user_zoom: float = 1.0
+var _touches: Dictionary = {}          ## touch index -> screen position
+var _pinch_distance: float = 0.0
+var _last_tap_msec: int = 0
+var _last_tap_pos: Vector2 = Vector2.ZERO
+var _press_pos: Vector2 = Vector2.ZERO
 
 
 func setup(game_ref: GameController, tank_nodes: Array) -> void:
@@ -64,6 +73,8 @@ func layout() -> void:
 
 
 func focus_tank(index: int, instant: bool = false) -> void:
+	if index != _focus_index:
+		_reset_view_adjustments()
 	_focus_index = index
 	if instant:
 		_snap = true
@@ -71,11 +82,18 @@ func focus_tank(index: int, instant: bool = false) -> void:
 
 func set_zoom(mode: int) -> void:
 	zoom_mode = mode
+	_reset_view_adjustments()
 
 
 func cycle_zoom() -> int:
 	zoom_mode = (zoom_mode + 1) % 3
+	_reset_view_adjustments()
 	return zoom_mode
+
+
+func _reset_view_adjustments() -> void:
+	_pan_offset = Vector2.ZERO
+	_user_zoom = 1.0
 
 
 func zoom_label_key() -> String:
@@ -127,9 +145,10 @@ func _update_target() -> void:
 
 
 func _process(delta: float) -> void:
-	if not _panning:
-		_update_target()
-	var blend: float = 1.0 if _snap else 1.0 - exp(-delta * 7.0)
+	_update_target()
+	_target_scale = clampf(_target_scale * _user_zoom, 0.05, 5.0)
+	_target_center += _pan_offset
+	var blend: float = 1.0 if _snap else 1.0 - exp(-delta * 8.0)
 	_snap = false
 	_cam_center = _cam_center.lerp(_target_center, blend)
 	_cam_scale = exp(lerpf(log(maxf(_cam_scale, 0.001)), log(maxf(_target_scale, 0.001)), blend))
@@ -143,31 +162,98 @@ func _process(delta: float) -> void:
 
 
 # ----------------------------------------------------------------------------------------
-# Dragging pans the camera (only reaches here when no tank used the touch)
+# Touch: drag pans, two fingers pinch-zoom, a tap on a tank goes to it, a double tap zooms
+# (only touches no tank used reach here — a tank consumes taps on fish and tool strokes)
 # ----------------------------------------------------------------------------------------
 
 func _unhandled_input(event: InputEvent) -> void:
+	if event is InputEventScreenTouch:
+		if event.pressed:
+			_touches[event.index] = event.position
+		else:
+			_touches.erase(event.index)
+		_pinch_distance = _current_pinch_distance()
+	elif event is InputEventScreenDrag:
+		_touches[event.index] = event.position
+		if _touches.size() >= 2:
+			var distance := _current_pinch_distance()
+			if _pinch_distance > 1.0 and distance > 1.0:
+				_zoom_by(distance / _pinch_distance)
+			_pinch_distance = distance
+			return
+	elif event is InputEventMagnifyGesture:
+		_zoom_by(event.factor)
+		return
+	elif event is InputEventMouseButton and event.pressed and (event.button_index == MOUSE_BUTTON_WHEEL_UP or event.button_index == MOUSE_BUTTON_WHEEL_DOWN):
+		_zoom_by(1.12 if event.button_index == MOUSE_BUTTON_WHEEL_UP else 1.0 / 1.12)
+		return
+
 	if game != null and game.tool != TankController.Tool.HAND:
 		return
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
-		_panning = event.pressed
-		_pan_moved = 0.0
-	elif event is InputEventScreenTouch:
-		_panning = event.pressed
-		_pan_moved = 0.0
+		if event.pressed:
+			_panning = true
+			_pan_moved = 0.0
+			_press_pos = event.position
+		else:
+			_panning = false
+			if _pan_moved < 12.0:
+				_on_tap(event.position)
 	elif _panning and event is InputEventMouseMotion and (event.button_mask & MOUSE_BUTTON_MASK_LEFT) != 0:
-		_pan(event.relative)
-	elif _panning and event is InputEventScreenDrag:
-		_pan(event.relative)
+		if _touches.size() < 2:
+			_pan(event.relative)
+
+
+func _current_pinch_distance() -> float:
+	if _touches.size() < 2:
+		return 0.0
+	var points: Array = _touches.values()
+	return (points[0] as Vector2).distance_to(points[1])
+
+
+func _zoom_by(factor: float) -> void:
+	_user_zoom = clampf(_user_zoom * factor, 0.35, 4.0)
+	_pan_moved = 999.0
 
 
 func _pan(relative: Vector2) -> void:
 	_pan_moved += relative.length()
-	if _pan_moved < 10.0:
+	if _pan_moved < 12.0:
 		return
-	_target_center -= relative / maxf(_cam_scale, 0.001)
-	_target_center.x = clampf(_target_center.x, _left - 600.0, _right + 600.0)
-	_target_center.y = clampf(_target_center.y, -_tallest * 1.3, 200.0)
+	_pan_offset -= relative / maxf(_cam_scale, 0.001)
+	var room_w := _right - _left
+	_pan_offset.x = clampf(_pan_offset.x, -room_w - 800.0, room_w + 800.0)
+	_pan_offset.y = clampf(_pan_offset.y, -_tallest * 1.2, _tallest * 0.8)
+
+
+## A tap that no tank took: on another tank (its frame or stand) — go to it and focus on it; a
+## second quick tap in the same place zooms in, or back out.
+func _on_tap(screen_point: Vector2) -> void:
+	var world := get_global_transform().affine_inverse() * screen_point
+	for i in range(_tanks.size()):
+		var tank: TankController = _tanks[i]
+		if tank.locked or not _tank_world_rect(i).has_point(world):
+			continue
+		if i != _focus_index:
+			if game != null:
+				zoom_mode = Zoom.FOCUS
+				game.select_tank(i)
+			_last_tap_msec = 0
+			return
+		break
+	var now := Time.get_ticks_msec()
+	if now - _last_tap_msec < 350 and screen_point.distance_to(_last_tap_pos) < 60.0:
+		_last_tap_msec = 0
+		if zoom_mode == Zoom.CLOSE or _user_zoom > 1.2:
+			set_zoom(Zoom.FOCUS)
+		else:
+			set_zoom(Zoom.CLOSE)
+			## Zoom in on the spot that was tapped, not the middle of the tank.
+			var tank: TankController = _tanks[_focus_index]
+			_pan_offset = world - (tank.position + tank._view_rect.get_center())
+		return
+	_last_tap_msec = now
+	_last_tap_pos = screen_point
 
 
 # ----------------------------------------------------------------------------------------

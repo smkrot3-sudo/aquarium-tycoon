@@ -10,6 +10,7 @@ config_version=5
 
 [application]
 
+config/quit_on_go_back=false
 config/name="Aquarium Tycoon"
 run/main_scene="res://scenes/main/Main.tscn"
 config/features=PackedStringArray("4.7")
@@ -46,3 +47,7 @@ renderer/rendering_method="mobile"
 renderer/rendering_method.mobile="mobile"
 textures/vram_compression/import_etc2_astc=true
 environment/defaults/default_clear_color=Color(0.1, 0.13, 0.19, 1)
+
+[input_devices]
+
+pointing/android/enable_pan_and_scale_gestures=true

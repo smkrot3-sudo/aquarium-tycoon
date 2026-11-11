@@ -163,9 +163,18 @@ func _ready() -> void:
 	EconomyManager.apply_mode()
 	for id in ["tank_25", "tank_60", "huge_freshwater_tank", "tank_450", "marine_120"]:
 		_main.buy_tank(id)
-		if id != "marine_120":
-			_main.buy_equipment("basic_light")
+		_main.buy_equipment("basic_light")
+		_main.buy_equipment("basic_heater")
+		if id == "marine_120":
+			_main.buy_equipment("protein_skimmer")
+			_main.buy_equipment("powerhead")
+		elif id == "huge_freshwater_tank" or id == "tank_450":
+			_main.buy_equipment("canister_filter")
+			_main.buy_equipment("air_stone")
+		else:
 			_main.buy_equipment("basic_filter")
+			_main.buy_equipment("air_stone")
+		if id != "marine_120":
 			for species_id in ["guppy", "platy", "neon_tetra", "angelfish", "goldfish", "oscar"]:
 				_main.buy_fish(species_id, FishController.Sex.MALE)
 				_main.buy_fish(species_id, FishController.Sex.FEMALE)
@@ -183,6 +192,14 @@ func _ready() -> void:
 	_main.room.set_zoom(RoomView.Zoom.FOCUS)
 	await _settle(90)
 	await _shot("27_small_tank_focus")
+	_main.select_tank(5)
+	await _settle(90)
+	await _shot("28_marine_equipment")
+	_main.select_tank(2)
+	_main.room.set_zoom(RoomView.Zoom.CLOSE)
+	await _settle(90)
+	await _shot("29_close_equipment")
+	_main.room.set_zoom(RoomView.Zoom.FOCUS)
 	Localization.set_language("en")
 	await _settle(20)
 	await _shot("22_english_hud")
