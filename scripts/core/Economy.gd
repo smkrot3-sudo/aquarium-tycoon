@@ -10,10 +10,23 @@ const MATURITY_PACE := 0.09  ## guppy: 60 -> ~5.4 sim days from fry to sellable 
 ## Fish stop breeding once the tank is this full (fraction of max_safe_bioload) — the player
 ## has to sell to make room, which is the whole economic loop, and it stops runaway floods.
 const BREEDING_STOCKING_LIMIT := 0.9
+## How long a livebearing female stays pregnant, as a share of the time between two batches
+## (a guppy: ~3.4 sim days between batches, so about 1.9 days pregnant).
+const GESTATION_SHARE := 0.55
+## Eggs hatch faster than the real incubation times (a killifish's two weeks would never be seen).
+const EGG_PACE := 0.5
 
 
 static func breeding_cooldown_days(species: FishSpeciesData) -> float:
 	return species.breeding_cooldown_sim_days * BREEDING_PACE
+
+
+static func gestation_days(species: FishSpeciesData) -> float:
+	return clampf(breeding_cooldown_days(species) * GESTATION_SHARE, 1.2, 12.0)
+
+
+static func incubation_days(species: FishSpeciesData) -> float:
+	return clampf(species.egg_incubation_sim_days * EGG_PACE, 0.8, 6.0)
 
 
 static func maturity_days(species: FishSpeciesData) -> float:

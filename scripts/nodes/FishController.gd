@@ -16,7 +16,7 @@ class_name FishController
 ## species flagged `color_variable` give each individual its own small random hue, so a tankful
 ## of guppies doesn't look like identical copies.
 
-const MAX_FRY_PER_BATCH_SPAWNED := 8  ## safety cap so a big offline catch-up can't flood the tank
+const MAX_FRY_PER_BATCH_SPAWNED := 12  ## safety cap so a big offline catch-up can't flood the tank
 const DISEASE_BASE_RISK_PER_DAY := 0.015
 const DISEASE_HEALTH_PENALTY_PER_DAY := 4.0
 const DISEASE_UNTREATED_RECOVERY_PER_DAY := 0.04
@@ -30,8 +30,8 @@ const VISUAL_SCALE := 2.8
 const MIN_SIZE_SCALE := 0.28
 ## Dimorphic species only: males read as the smaller, showier sex; females as the larger, plainer
 ## one — true to life for the livebearers/betta this is actually set on.
-const MALE_SCALE := 0.84
-const FEMALE_SCALE := 1.14
+const MALE_SCALE := 0.92
+const FEMALE_SCALE := 1.0
 const MALE_TINT := Color(1.08, 1.0, 0.94)
 const FEMALE_TINT := Color(0.86, 0.9, 0.96)
 ## Color-variable species: how far an individual's hue can wander from the species' reference
@@ -67,6 +67,12 @@ var age_sim_days: float = 0.0
 ## is already grown, but it hasn't been YOUR fish for very long) — what "Tap a fish" shows.
 var days_in_tank: float = 0.0
 var breeding_cooldown_remaining: float = 0.0
+## Livebearers (and mouthbrooders, who carry the eggs in their mouths) are pregnant for a while
+## before the young are born. 0 total = not pregnant.
+var pregnancy_total: float = 0.0
+var pregnancy_left: float = 0.0
+var pregnancy_litter: int = 0
+var pregnancy_strain: float = 0.0   ## sim days spent sick, hungry or in bad water while pregnant
 var is_sick: bool = false      ## generic illness; see FishController.simulate_hours disease roll
 
 var sex: Sex = Sex.MALE
@@ -272,7 +278,7 @@ func _pick_target() -> void:
 	_target.x = clampf(_target.x, zone.position.x, zone.end.x)
 	_target.y = clampf(_target.y, zone.position.y, zone.end.y)
 	var speed_range: Vector2 = _style["speed"]
-	_cruise_speed = randf_range(speed_range.x, speed_range.y) * (1.15 if is_fry else 1.0) * (0.55 if is_sick else 1.0)
+	_cruise_speed = randf_range(speed_range.x, speed_range.y) * (1.15 if is_fry else 1.0) * (0.55 if is_sick else 1.0) * (0.6 if is_in_labor() else 1.0)
 	if _feeding_left > 0.0:
 		_cruise_speed = maxf(_cruise_speed * 1.6, 70.0)
 
@@ -410,6 +416,9 @@ func _process(delta: float) -> void:
 			stretch.x = 1.0 - absf(sin(_phase)) * 0.025 * effort
 	if is_sick:
 		tilt += 0.28
+	var bulge: float = pregnancy_bulge()
+	if bulge > 0.0:
+		stretch = Vector2(stretch.x * (1.0 + 0.05 * bulge), stretch.y * (1.0 + 0.22 * bulge))
 	_visual_root.scale = Vector2(_base_scale * face * stretch.x, _base_scale * stretch.y)
 	_visual_root.position.y = lift
 	_visual_root.rotation = tilt * signf(face)
@@ -464,7 +473,7 @@ func simulate_hours(hours: float, tank: TankController) -> void:
 		queue_free()
 		return
 
-	hunger = max(0.0, hunger - HUNGER_LOSS_PER_HOUR * hours * tank.metabolism_factor())
+	hunger = max(0.0, hunger - HUNGER_LOSS_PER_HOUR * hours * tank.metabolism_factor() * pregnancy_hunger_factor())
 
 	var in_tolerance := species.is_within_tolerance(tank.temperature, tank.ph, tank.gh, tank.specific_gravity)
 	var schooling_ok := true
@@ -564,6 +573,9 @@ func _update_breeding(days: float, in_tolerance: bool, tank: TankController) -> 
 	## until _find_partner (called from the female's turn) resets him.
 	if sex != Sex.FEMALE:
 		return
+	if is_pregnant():
+		_advance_pregnancy(days, in_tolerance, tank)
+		return
 	breeding_cooldown_remaining = max(0.0, breeding_cooldown_remaining - days)
 	if breeding_cooldown_remaining > 0.0:
 		return
@@ -575,7 +587,8 @@ func _update_breeding(days: float, in_tolerance: bool, tank: TankController) -> 
 	if partner == null:
 		return
 	if species.is_livebearer:
-		_breed_livebearer(tank)
+		_begin_pregnancy()
+		tank.fish_became_pregnant.emit(self)
 	else:
 		_breed_egg_layer(tank)
 	## One batch per pair: the male's clock restarts too, otherwise he could father a batch
@@ -591,14 +604,73 @@ func _find_partner(tank: TankController) -> FishController:
 	return null
 
 
-func _breed_livebearer(tank: TankController) -> void:
-	var fry_count: int = randi_range(species.fry_per_batch_min, species.fry_per_batch_max)
-	fry_count = min(fry_count, MAX_FRY_PER_BATCH_SPAWNED)
-	for i in range(fry_count):
+func is_pregnant() -> bool:
+	return pregnancy_total > 0.0
+
+
+func is_mouthbrooding() -> bool:
+	return is_pregnant() and species.compatibility_tags.has("mouthbrooder")
+
+
+## 0..1 through the pregnancy.
+func pregnancy_progress() -> float:
+	if pregnancy_total <= 0.0:
+		return 0.0
+	return clampf(1.0 - pregnancy_left / pregnancy_total, 0.0, 1.0)
+
+
+func is_in_labor() -> bool:
+	return is_pregnant() and pregnancy_progress() >= 0.92
+
+
+## How round the belly is (0 = not pregnant, 1 = about to give birth).
+func pregnancy_bulge() -> float:
+	if not is_pregnant():
+		return 0.0
+	return smoothstep(0.05, 0.95, pregnancy_progress())
+
+
+## A pregnant female eats a bit more; a mouthbrooder carrying eggs hardly eats at all.
+func pregnancy_hunger_factor() -> float:
+	if not is_pregnant():
+		return 1.0
+	return 0.7 if is_mouthbrooding() else 1.25
+
+
+func _begin_pregnancy() -> void:
+	pregnancy_total = Economy.gestation_days(species)
+	pregnancy_left = pregnancy_total
+	pregnancy_litter = randi_range(species.fry_per_batch_min, species.fry_per_batch_max)
+	pregnancy_strain = 0.0
+	breeding_cooldown_remaining = Economy.breeding_cooldown_days(species)
+
+
+func _advance_pregnancy(days: float, in_tolerance: bool, tank: TankController) -> void:
+	pregnancy_left -= days
+	if health < 45.0 or hunger < 15.0 or not in_tolerance or is_sick:
+		pregnancy_strain += days
+	if pregnancy_left <= 0.0:
+		_give_birth(tank)
+
+
+## The young are born alive, free-swimming, right where the mother is. A pregnancy that went
+## through hunger, illness or bad water produces fewer of them.
+func _give_birth(tank: TankController) -> void:
+	var litter: int = pregnancy_litter
+	if pregnancy_strain > pregnancy_total * 0.3:
+		litter = int(floor(float(litter) * 0.5))
+	litter = min(litter, MAX_FRY_PER_BATCH_SPAWNED)
+	var carried_in_mouth: bool = is_mouthbrooding()
+	pregnancy_total = 0.0
+	pregnancy_left = 0.0
+	pregnancy_litter = 0
+	pregnancy_strain = 0.0
+	breeding_cooldown_remaining = Economy.breeding_cooldown_days(species)
+	for i in range(litter):
 		var fry := tank.add_fish(species, true)
 		fry.position = position + Vector2(randf_range(-30.0, 30.0), randf_range(-20.0, 20.0))
-	breeding_cooldown_remaining = Economy.breeding_cooldown_days(species)
-	tank.fish_born.emit(species, fry_count)
+	tank.spawn_birth_effect(position)
+	tank.fish_gave_birth.emit(self, litter, carried_in_mouth)
 
 
 ## Egg-layers (plan's "broadens breeding mechanics" roster item): a batch of eggs sits in
@@ -606,8 +678,8 @@ func _breed_livebearer(tank: TankController) -> void:
 ## fry immediately like a livebearer does.
 func _breed_egg_layer(tank: TankController) -> void:
 	var egg_count: int = randi_range(species.fry_per_batch_min, species.fry_per_batch_max)
-	egg_count = min(egg_count, MAX_FRY_PER_BATCH_SPAWNED)
-	tank.schedule_egg_batch(species, egg_count, species.egg_incubation_sim_days)
+	egg_count = min(egg_count, 40)
+	tank.schedule_egg_batch(species, egg_count, Economy.incubation_days(species), self)
 	breeding_cooldown_remaining = Economy.breeding_cooldown_days(species)
 
 
@@ -625,6 +697,7 @@ func to_save_dict() -> Dictionary:
 		"hunger": hunger, "stress": stress, "health": health,
 		"size_cm": size_cm, "age_sim_days": age_sim_days, "days_in_tank": days_in_tank,
 		"breeding_cooldown_remaining": breeding_cooldown_remaining,
+		"pregnancy_total": pregnancy_total, "pregnancy_left": pregnancy_left, "pregnancy_litter": pregnancy_litter, "pregnancy_strain": pregnancy_strain,
 		"is_sick": is_sick, "sex": sex, "fish_name": fish_name,
 		"hue_shift": _material.get_shader_parameter("hue_shift") if _material != null else 0.0,
 	}
@@ -642,6 +715,10 @@ func from_save_dict(d: Dictionary) -> void:
 	## waiting weeks of sim time for their first batch.
 	breeding_cooldown_remaining = minf(d.get("breeding_cooldown_remaining", 0.0), Economy.breeding_cooldown_days(species))
 	is_sick = d.get("is_sick", false)
+	pregnancy_total = float(d.get("pregnancy_total", 0.0))
+	pregnancy_left = float(d.get("pregnancy_left", 0.0))
+	pregnancy_litter = int(d.get("pregnancy_litter", 0))
+	pregnancy_strain = float(d.get("pregnancy_strain", 0.0))
 	sex = int(d.get("sex", sex)) as Sex
 	fish_name = d.get("fish_name", fish_name if fish_name != "" else FishNames.pick(sex, Localization.current_language))
 	if species.dimorphic:

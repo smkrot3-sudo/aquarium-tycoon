@@ -162,6 +162,14 @@ func _fill_readings(tank: TankController) -> void:
 	var stocking := tank.stocking_fraction()
 	_add_bar(Localization.t("tank_stocking"), stocking, UiKit.COL_BAD if stocking > 0.95 else (UiKit.COL_WARN if stocking > 0.75 else UiKit.COL_PRIMARY), Localization.t("tank_hint_crowded") if stocking > 0.95 else "")
 	_add_reading(Localization.t("tank_last_water_change"), Localization.t("tank_days_ago", [int(tank.days_since_water_change)]), UiKit.COL_WARN if tank.days_since_water_change >= 10.0 else UiKit.COL_TEXT, "")
+	var pregnant := 0
+	for fish in tank.get_fish():
+		if fish.is_pregnant():
+			pregnant += 1
+	if pregnant > 0:
+		_add_reading(Localization.t("tank_pregnant"), str(pregnant), Color(1.0, 0.65, 0.8), "")
+	if not tank.pending_egg_batches.is_empty():
+		_add_reading(Localization.t("tank_eggs"), Localization.t("tank_eggs_value", [tank.pending_egg_batches.size(), tank.egg_count_alive()]), UiKit.COL_WARN, "")
 	if tank.sick_fish_count() > 0:
 		var treating: bool = tank.medication_remaining_days > 0.0
 		_add_reading(Localization.t("tank_sick"), str(tank.sick_fish_count()), UiKit.COL_BAD, Localization.t("tank_hint_treating") if treating else Localization.t("tank_hint_sick"))

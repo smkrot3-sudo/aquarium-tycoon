@@ -39,6 +39,7 @@ var business: BusinessPanel
 var stats: StatsPanel
 var advisor: AdvisorPanel
 var move_panel: MoveFishPanel
+var egg_panel: EggPanel
 var toast_view: ToastView
 
 ## Where the in-app update flow currently is — see UpdateChecker (autoload) for the actual
@@ -102,6 +103,11 @@ func _ready() -> void:
 		tank.fry_eaten.connect(_on_fry_eaten)
 		tank.water_quality_alert.connect(_on_water_quality_alert)
 		tank.fish_born.connect(_on_fish_born)
+		tank.fish_gave_birth.connect(_on_fish_gave_birth)
+		tank.fish_became_pregnant.connect(_on_fish_became_pregnant)
+		tank.eggs_laid.connect(_on_eggs_laid)
+		tank.eggs_hatched.connect(_on_eggs_hatched)
+		tank.eggs_lost.connect(_on_eggs_lost)
 		tank.fish_died.connect(_on_fish_died)
 		tank.tool_cleaned.connect(_on_tool_cleaned)
 		tank.refresh_equipment_visuals()
@@ -177,6 +183,7 @@ func _build_ui() -> void:
 	stats = StatsPanel.new()
 	advisor = AdvisorPanel.new()
 	move_panel = MoveFishPanel.new()
+	egg_panel = EggPanel.new()
 	for panel in _all_panels():
 		panel.game = self
 		ui_root.add_child(panel)
@@ -187,7 +194,7 @@ func _build_ui() -> void:
 
 
 func _all_panels() -> Array:
-	return [shop, fish_panel, tank_panel, guide, settings, welcome, fish_detail, new_game, business, stats, advisor, move_panel]
+	return [shop, fish_panel, tank_panel, guide, settings, welcome, fish_detail, new_game, business, stats, advisor, move_panel, egg_panel]
 
 
 func _rebuild_ui() -> void:
@@ -244,6 +251,49 @@ func open_fish_detail(fish: FishController) -> void:
 			panel.close()
 	fish_detail.inspect(fish)
 	fish_detail.open()
+
+
+func open_egg_info(tank: TankController, batch_id: int) -> void:
+	ErrorLog.crumb("open_egg_info")
+	for panel in _all_panels():
+		if panel != egg_panel and panel != null and panel.visible:
+			panel.close()
+	egg_panel.inspect(tank, batch_id)
+	egg_panel.open()
+
+
+## "" when a clutch of this species can go to `dest`.
+func egg_move_block_reason(species: FishSpeciesData, dest: TankController) -> String:
+	if dest.locked:
+		return Localization.t("move_no_tank")
+	var salt: bool = dest.tank_type == TankController.TankType.SALTWATER
+	if species.is_marine and not salt:
+		return Localization.t("alert_marine_needs_saltwater", [Localization.t("sp_%s" % species.id)])
+	if not species.is_marine and salt:
+		return Localization.t("alert_freshwater_in_saltwater", [Localization.t("sp_%s" % species.id)])
+	if dest.is_pond() and species.habitat == 0:
+		return Localization.t("alert_not_for_pond", [Localization.t("sp_%s" % species.id)])
+	if not dest.is_pond() and species.habitat == 1:
+		return Localization.t("alert_pond_only", [Localization.t("sp_%s" % species.id)])
+	return ""
+
+
+func move_eggs(tank: TankController, batch_id: int, dest_index: int) -> bool:
+	ErrorLog.crumb("move_eggs")
+	if dest_index < 0 or dest_index >= _tanks.size():
+		return false
+	var dest := _tanks[dest_index]
+	var batch := tank.find_egg_batch(batch_id)
+	if batch.is_empty() or dest == tank:
+		return false
+	var species := ShopManager.get_species(str(batch["species_id"]))
+	if species == null or egg_move_block_reason(species, dest) != "":
+		return false
+	dest.adopt_egg_batch(tank.take_egg_batch(batch_id))
+	AudioManager.play("splash")
+	toast(Localization.t("toast_eggs_moved", [tank_display_name(dest_index)]), "good")
+	state_changed.emit()
+	return true
 
 
 ## Sells exactly this fish (the detail card's sell button) rather than "the least healthy one
@@ -887,6 +937,16 @@ func current_tip() -> Dictionary:
 		return {"text": Localization.t("tip_feed"), "action": feed.bind(false), "kind": "warn"}
 	if tank.sick_fish_count() > 0 and tank.medication_remaining_days <= 0.0:
 		return {"text": Localization.t("tip_treat", [medication_price()]), "action": treat_disease, "kind": "bad"}
+	var adult_count := 0
+	for fish in fish_list:
+		if not fish.is_fry:
+			adult_count += 1
+	for fish in fish_list:
+		if fish.is_pregnant() and not fish.is_mouthbrooding() and fish.pregnancy_progress() >= 0.5 and adult_count > 1:
+			return {"text": Localization.t("tip_birth_soon", [fish.fish_name]), "action": open_move_fish.bind([fish]), "kind": "warn"}
+	for batch in tank.pending_egg_batches:
+		if not bool(batch.get("guarded_now", false)) and adult_count > 0:
+			return {"text": Localization.t("tip_eggs_unguarded"), "action": open_egg_info.bind(tank, int(batch["id"])), "kind": "warn"}
 	if tank.is_pond() and not tank.has_net:
 		return {"text": Localization.t("tip_pond_net"), "action": to_shop_equipment, "kind": "warn"}
 	if not tank.is_pond() and (tank.heater == null or tank.heater_failed):
@@ -1113,6 +1173,40 @@ func _on_water_quality_alert(message_key: String) -> void:
 		return
 	_alert_last_shown[message_key] = now
 	toast(Localization.t(message_key), "bad")
+
+
+func _on_fish_became_pregnant(fish: FishController) -> void:
+	var key := "toast_mouthbrooding" if fish.species.compatibility_tags.has("mouthbrooder") else "toast_pregnant"
+	toast(Localization.t(key, [fish.fish_name, Localization.t("sp_%s" % fish.species.id)]), "good")
+	state_changed.emit()
+
+
+func _on_fish_gave_birth(fish: FishController, count: int, from_mouth: bool) -> void:
+	if count <= 0:
+		toast(Localization.t("toast_birth_none", [fish.fish_name]), "bad")
+	elif from_mouth:
+		toast(Localization.t("toast_mouth_release", [fish.fish_name, count]), "good")
+	else:
+		toast(Localization.t("toast_birth", [fish.fish_name, count]), "good")
+	AudioManager.play("coin")
+	state_changed.emit()
+
+
+func _on_eggs_laid(species: FishSpeciesData, count: int) -> void:
+	toast(Localization.t("toast_eggs_laid", [Localization.t("sp_%s" % species.id), count]), "good")
+	state_changed.emit()
+
+
+func _on_eggs_hatched(species: FishSpeciesData, count: int) -> void:
+	toast(Localization.t("toast_born", [count, Localization.t("sp_%s" % species.id)]), "good")
+	AudioManager.play("coin")
+	state_changed.emit()
+
+
+func _on_eggs_lost(species: FishSpeciesData, reason: String) -> void:
+	var key := "toast_eggs_eaten" if reason == "eaten" else "toast_eggs_fungus"
+	toast(Localization.t(key, [Localization.t("sp_%s" % species.id)]), "bad")
+	state_changed.emit()
 
 
 func _on_fish_born(species: FishSpeciesData, count: int) -> void:

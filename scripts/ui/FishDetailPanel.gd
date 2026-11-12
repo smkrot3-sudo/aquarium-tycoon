@@ -98,6 +98,15 @@ func refresh() -> void:
 	_add_bar(Localization.t("fish_detail_hunger"), _fish.hunger / 100.0, UiKit.COL_GOOD if _fish.hunger >= 40.0 else UiKit.COL_WARN)
 	if _fish.is_sick:
 		_add_stat(Localization.t("fish_detail_condition"), Localization.t("fish_detail_sick"), UiKit.COL_BAD)
+	if _fish.is_pregnant():
+		var status_key := "fish_detail_pregnant"
+		if _fish.is_mouthbrooding():
+			status_key = "fish_detail_mouthbrooding"
+		if _fish.is_in_labor():
+			status_key = "fish_detail_labor"
+		_add_stat(Localization.t("fish_detail_condition"), Localization.t(status_key), Color(1.0, 0.65, 0.8))
+		_add_bar(Localization.t("fish_detail_due"), _fish.pregnancy_progress(), Color(1.0, 0.65, 0.8))
+		_add_stat(Localization.t("fish_detail_due_in"), Localization.t("egg_days", [maxf(0.0, _fish.pregnancy_left)]))
 
 	UiKit.set_action_text(_sell_button, Localization.t("fish_detail_sell_for", [Economy.fry_sale_value(species, _fish.is_fry)]))
 	_auction_button.visible = Market.can_auction(_fish)

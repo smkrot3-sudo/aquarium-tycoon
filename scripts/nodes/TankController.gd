@@ -27,6 +27,31 @@ const BACKGROUND := {
 	TankType.SALTWATER: "res://assets/backgrounds/marine.jpg",
 	TankType.POND: "res://assets/backgrounds/freshwater.jpg",
 }
+## The scenery pictures a tank can have. Each tank gets its own `scape_seed`, which picks one of
+## these, mirrors it or not, crops it to show mostly its left or right side (or all of it) and
+## tints the water a little, so no two tanks look alike. `sand` is the fraction of the picture's
+## height taken by the floor (where bottom-dwellers rest).
+const SCAPES := {
+	TankType.FRESHWATER: [
+		{"path": "res://assets/backgrounds/freshwater.jpg", "sand": 0.17},
+		{"path": "res://assets/backgrounds/fresh_planted.jpg", "sand": 0.19},
+		{"path": "res://assets/backgrounds/fresh_rock.jpg", "sand": 0.17},
+		{"path": "res://assets/backgrounds/fresh_wood.jpg", "sand": 0.13},
+	],
+	TankType.SALTWATER: [
+		{"path": "res://assets/backgrounds/marine.jpg", "sand": 0.17},
+	],
+	TankType.POND: [
+		{"path": "res://assets/backgrounds/freshwater.jpg", "sand": 0.17},
+		{"path": "res://assets/backgrounds/fresh_planted.jpg", "sand": 0.19},
+		{"path": "res://assets/backgrounds/fresh_rock.jpg", "sand": 0.17},
+	],
+}
+const SCAPE_TINTS := {
+	TankType.FRESHWATER: [Color(1, 1, 1), Color(0.9, 1.0, 0.94), Color(0.94, 0.97, 1.0)],
+	TankType.SALTWATER: [Color(1, 1, 1), Color(0.84, 1.0, 1.0), Color(0.92, 0.9, 1.0)],
+	TankType.POND: [Color(0.66, 0.84, 0.62), Color(0.62, 0.8, 0.58), Color(0.7, 0.84, 0.7)],
+}
 ## A pond below this temperature is iced over; fish stop eating well well before that.
 const ICE_BELOW_C := 4.0
 const HERON_CHANCE_PER_DAY := 0.08
@@ -65,6 +90,8 @@ const MAX_CHEMISTRY_SUBSTEPS := 240
 ## Pond only: a net over the water that keeps the heron (and falling leaves) out.
 var has_net: bool = false
 var _ice_drawn: bool = false
+## Picks this tank's scenery (see SCAPES); saved with the tank.
+var scape_seed: int = 0
 ## What the player paid for this tank (selling it returns a part of that).
 var purchase_price: int = 0
 
@@ -123,12 +150,24 @@ var _school_targets: Dictionary = {}
 var _home_points: Dictionary = {}
 
 ## Egg-layer breeding: {species_id: String, count: int, remaining_days: float}
+## One entry per clutch: {id, species_id, viable, duds, remaining_days, total_days, x, y, guard,
+## guarded_now, eaten, rotted} (x/y in tank pixels). EggClutch2D nodes draw them.
 var pending_egg_batches: Array = []
+var _egg_nodes: Dictionary = {}
+var _next_egg_id: int = 1
 
 ## Emits a Localization key, not a user-facing string — TankController is the simulation layer
 ## and shouldn't own display text; GameController._on_water_quality_alert() does the lookup.
 signal water_quality_alert(message_key: String)
 signal fish_born(species: FishSpeciesData, count: int)
+## A pregnant female gave birth (count may be 0 after a hard pregnancy). In-mouth = a mouthbrooder
+## releasing her young.
+signal fish_gave_birth(fish: FishController, count: int, from_mouth: bool)
+signal fish_became_pregnant(fish: FishController)
+signal eggs_laid(species: FishSpeciesData, count: int)
+signal eggs_hatched(species: FishSpeciesData, count: int)
+## reason: "eaten" or "fungus"
+signal eggs_lost(species: FishSpeciesData, reason: String)
 ## reason: "old_age" or "neglect" (FishController.death_reason) — lets the toast tell them apart.
 signal fish_died(species: FishSpeciesData, fish_name: String, reason: String)
 ## A cleaning stroke removed some algae (tool == SCRAPER) or mulm (tool == VACUUM).
@@ -174,6 +213,10 @@ static func stand_height_px(liters: float, type: int = TankType.FRESHWATER) -> f
 	if type == TankType.POND:
 		return 0.0
 	return lerpf(55.0, 85.0, clampf(liters / 1000.0, 0.0, 1.0)) * PX_PER_CM
+
+
+func reroll_scape() -> void:
+	scape_seed = randi() & 0x7fffffff
 
 
 func is_pond() -> bool:
@@ -405,6 +448,11 @@ func _unhandled_input(event: InputEvent) -> void:
 			game.open_fish_detail(closest)
 			get_viewport().set_input_as_handled()
 			return
+		var egg_batch := egg_batch_at(point, 28.0 / screen_scale)
+		if not egg_batch.is_empty():
+			game.open_egg_info(self, int(egg_batch["id"]))
+			get_viewport().set_input_as_handled()
+			return
 
 	for fish in get_fish():
 		if fish.position.distance_to(point) < 220.0:
@@ -453,7 +501,7 @@ func pinch(food: FoodItemData, point: Vector2) -> int:
 	var fed := 0
 	for fish in get_fish():
 		var dist: float = fish.position.distance_to(point)
-		if dist < 300.0:
+		if dist < 300.0 and not fish.is_mouthbrooding():
 			fish.hunger = minf(100.0, fish.hunger + food.hunger_restored * 0.7)
 			fish.attract_to(point + Vector2(randf_range(-50.0, 50.0), randf_range(-30.0, 40.0)))
 			fed += 1
@@ -493,7 +541,14 @@ func _rebuild_background() -> void:
 	if _background != null:
 		_background.queue_free()
 		_background = null
-	var path: String = BACKGROUND[tank_type]
+	var scapes: Array = SCAPES[tank_type]
+	var choice: Dictionary = scapes[scape_seed % scapes.size()]
+	var rest: int = scape_seed / scapes.size()
+	var flip: bool = rest % 2 == 1
+	var view: int = (rest / 2) % 3          ## 0 = the whole picture, 1 = its left part, 2 = its right part
+	var tints: Array = SCAPE_TINTS[tank_type]
+	var tint: Color = tints[(rest / 6) % tints.size()]
+	var path: String = choice["path"]
 	if not ResourceLoader.exists(path):
 		_sand_top_y = _view_rect.end.y - _view_rect.size.y * 0.15
 		return
@@ -510,17 +565,24 @@ func _rebuild_background() -> void:
 		crop.y = tex_size.x / interior_aspect
 	else:
 		crop.x = tex_size.y * interior_aspect
+	var zoom: float = 1.0 if view == 0 else 1.35
+	crop /= zoom
+	var crop_x: float = (tex_size.x - crop.x) * 0.5
+	if view == 1:
+		crop_x = 0.0
+	elif view == 2:
+		crop_x = tex_size.x - crop.x
 	sprite.region_enabled = true
-	sprite.region_rect = Rect2((tex_size.x - crop.x) * 0.5, tex_size.y - crop.y, crop.x, crop.y)
+	sprite.region_rect = Rect2(crop_x, tex_size.y - crop.y, crop.x, crop.y)
+	sprite.flip_h = flip
 	var s: float = _view_rect.size.x / crop.x
 	sprite.scale = Vector2.ONE * s
 	sprite.position = Vector2.ZERO
-	if tank_type == TankType.POND:
-		sprite.modulate = Color(0.66, 0.84, 0.62)  ## murkier, greener garden water
+	sprite.modulate = tint
 	add_child(sprite)
 	move_child(sprite, 0)
 	_background = sprite
-	_sand_top_y = _view_rect.end.y - tex_size.y * s * SAND_FRACTION
+	_sand_top_y = _view_rect.end.y - tex_size.y * s * float(choice["sand"])
 
 
 func _full_view_polygon() -> PackedVector2Array:
@@ -624,6 +686,7 @@ func unlock(liters: float, type: int, ambient_base_c: float) -> void:
 	ph = PH_BASELINE[tank_type]
 	specific_gravity = SG_TARGET[tank_type]
 	has_net = false
+	reroll_scape()
 	if tank_type == TankType.POND:
 		temperature = Weather.pond_ambient_c()
 	locked = false
@@ -642,6 +705,7 @@ func reset_to_new(as_locked: bool, liters: float, type: TankType, ambient_base_c
 	air_stone = null
 	has_test_kit = false
 	has_net = false
+	reroll_scape()
 	tank_liters = liters
 	tank_type = type
 	ambient_temp_base_c = ambient_base_c
@@ -660,6 +724,7 @@ func reset_to_new(as_locked: bool, liters: float, type: TankType, ambient_base_c
 	medication_remaining_days = 0.0
 	active_events.clear()
 	pending_egg_batches.clear()
+	_sync_egg_nodes()
 	_school_targets.clear()
 	_home_points.clear()
 	if _algae != null:
@@ -724,6 +789,7 @@ func simulate_hours(hours: float) -> void:
 
 	for fish in get_fish():
 		fish.simulate_hours(hours, self)
+	_advance_egg_batches(hours / 24.0)
 
 	if _equipment_layer != null and heater != null:
 		_equipment_layer.queue_redraw()
@@ -807,7 +873,6 @@ func on_day_elapsed() -> void:
 			refresh_equipment_visuals()
 		active_events.erase(event_id)
 
-	_advance_egg_batches(1.0)
 	_fry_predation()
 	_heron_visit()
 
@@ -877,22 +942,246 @@ func apply_offline_catch_up(sim_days_elapsed: float) -> void:
 	days_since_water_change += sim_days_elapsed
 	days_since_feeding += sim_days_elapsed
 	medication_remaining_days = max(0.0, medication_remaining_days - sim_days_elapsed)
-	_advance_egg_batches(sim_days_elapsed)
 
 
-func _advance_egg_batches(days: float) -> void:
-	var hatched := []
+# ----------------------------------------------------------------------------------------
+# Eggs
+# ----------------------------------------------------------------------------------------
+
+func egg_style_for(species: FishSpeciesData) -> String:
+	if species.archetype_id == "labyrinth":
+		return EggClutch2D.STYLE_FOAM
+	if species.archetype_id == "invertebrate":
+		return EggClutch2D.STYLE_BERRIED
+	if species.compatibility_tags.has("cichlid") or species.archetype_id == "bottom_dweller":
+		return EggClutch2D.STYLE_BIG
+	return EggClutch2D.STYLE_SCATTER
+
+
+## Do the parents of this kind of fish guard their eggs? (A guarding parent only helps while it is
+## actually in the tank and healthy.)
+func species_guards_eggs(species: FishSpeciesData) -> bool:
+	var style := egg_style_for(species)
+	return style == EggClutch2D.STYLE_FOAM or style == EggClutch2D.STYLE_BERRIED or species.compatibility_tags.has("cichlid") or species.compatibility_tags.has("algae_eater")
+
+
+func _egg_position(style: String) -> Vector2:
+	var swim := get_swim_rect()
+	var x: float = randf_range(swim.position.x + swim.size.x * 0.1, swim.end.x - swim.size.x * 0.1)
+	var y: float
+	match style:
+		EggClutch2D.STYLE_FOAM:
+			y = get_surface_y() + 12.0
+		EggClutch2D.STYLE_BIG, EggClutch2D.STYLE_BERRIED:
+			y = _sand_top_y + minf(26.0, (_view_rect.end.y - _sand_top_y) * 0.4)
+		_:
+			y = randf_range(swim.end.y - 150.0, swim.end.y - 30.0)  ## among the plants, low in the water
+	return Vector2(x, y)
+
+
+func schedule_egg_batch(species: FishSpeciesData, count: int, incubation_days: float, _mother: FishController = null) -> void:
+	var style := egg_style_for(species)
+	var spot := _egg_position(style)
+	## Not every egg is fertile.
+	var viable: float = float(count) * randf_range(0.72, 1.0)
+	var batch := {
+		"id": _next_egg_id, "species_id": species.id, "viable": viable, "duds": float(count) - viable,
+		"remaining_days": incubation_days, "total_days": incubation_days, "x": spot.x, "y": spot.y,
+		"guard": species_guards_eggs(species), "guarded_now": false, "eaten": 0.0, "rotted": 0.0,
+	}
+	_next_egg_id += 1
+	pending_egg_batches.append(batch)
+	_sync_egg_nodes()
+	eggs_laid.emit(species, count)
+
+
+## Saves from before eggs were visible hold {species_id, count, remaining_days} only.
+func _upgrade_egg_batches(raw: Array) -> Array:
+	var out: Array = []
+	for entry in raw:
+		var species := ShopManager.get_species(str(entry.get("species_id", "")))
+		if species == null:
+			continue
+		var style := egg_style_for(species)
+		var spot := _egg_position(style)
+		var batch: Dictionary = entry
+		if not batch.has("viable"):
+			var count: float = float(batch.get("count", 4))
+			batch["viable"] = count
+			batch["duds"] = 0.0
+		batch["remaining_days"] = float(batch.get("remaining_days", 1.0))
+		batch["total_days"] = float(batch.get("total_days", maxf(batch["remaining_days"], 1.0)))
+		batch["x"] = float(batch.get("x", spot.x))
+		batch["y"] = float(batch.get("y", spot.y))
+		batch["guard"] = bool(batch.get("guard", species_guards_eggs(species)))
+		batch["guarded_now"] = false
+		batch["eaten"] = float(batch.get("eaten", 0.0))
+		batch["rotted"] = float(batch.get("rotted", 0.0))
+		batch["id"] = int(batch.get("id", _next_egg_id))
+		_next_egg_id = maxi(_next_egg_id, int(batch["id"]) + 1)
+		out.append(batch)
+	return out
+
+
+func find_egg_batch(id: int) -> Dictionary:
 	for batch in pending_egg_batches:
-		batch.remaining_days -= days
-		if batch.remaining_days <= 0.0:
-			hatched.append(batch)
-	for batch in hatched:
-		var species := ShopManager.get_species(batch.species_id)
-		if species != null:
-			for i in range(batch.count):
-				add_fish(species, true)
-			fish_born.emit(species, batch.count)
+		if int(batch["id"]) == id:
+			return batch
+	return {}
+
+
+## The clutch under a tap (local tank pixels), or {}. `slack` widens the target for a fingertip.
+func egg_batch_at(point: Vector2, slack: float) -> Dictionary:
+	var best: Dictionary = {}
+	var best_dist := INF
+	for batch in pending_egg_batches:
+		var node: EggClutch2D = _egg_nodes.get(int(batch["id"]))
+		var reach: float = (node.cluster_radius() if node != null else 30.0) + 16.0 + slack
+		var dist: float = Vector2(float(batch["x"]), float(batch["y"])).distance_to(point)
+		if dist <= reach and dist < best_dist:
+			best = batch
+			best_dist = dist
+	return best
+
+
+func egg_count_alive() -> int:
+	var total := 0
+	for batch in pending_egg_batches:
+		total += int(round(float(batch["viable"])))
+	return total
+
+
+## The white, fuzzy eggs are the ones that spread fungus; picking them out helps the rest.
+func remove_dud_eggs(id: int) -> void:
+	var batch := find_egg_batch(id)
+	if not batch.is_empty():
+		batch["duds"] = 0.0
+		_sync_egg_nodes()
+
+
+func remove_egg_batch(id: int) -> void:
+	var batch := find_egg_batch(id)
+	if not batch.is_empty():
 		pending_egg_batches.erase(batch)
+		_sync_egg_nodes()
+
+
+## Takes a clutch out of this tank (to put it in another with adopt_egg_batch).
+func take_egg_batch(id: int) -> Dictionary:
+	var batch := find_egg_batch(id)
+	if not batch.is_empty():
+		pending_egg_batches.erase(batch)
+		_sync_egg_nodes()
+	return batch
+
+
+func adopt_egg_batch(batch: Dictionary) -> void:
+	var species := ShopManager.get_species(str(batch.get("species_id", "")))
+	if species == null:
+		return
+	var spot := _egg_position(egg_style_for(species))
+	batch["id"] = _next_egg_id
+	_next_egg_id += 1
+	batch["x"] = spot.x
+	batch["y"] = spot.y
+	pending_egg_batches.append(batch)
+	_sync_egg_nodes()
+
+
+func spawn_birth_effect(at: Vector2) -> void:
+	if _bubbles == null:
+		return
+	for i in range(7):
+		_bubbles.spawn_single(at + Vector2(randf_range(-26.0, 26.0), randf_range(-14.0, 14.0)))
+
+
+## Keeps one EggClutch2D per clutch.
+func _sync_egg_nodes() -> void:
+	var live := {}
+	for batch in pending_egg_batches:
+		var id: int = int(batch["id"])
+		live[id] = true
+		var node: EggClutch2D = _egg_nodes.get(id)
+		if node == null or not is_instance_valid(node):
+			var species := ShopManager.get_species(str(batch["species_id"]))
+			node = EggClutch2D.new()
+			node.name = "Eggs%d" % id
+			node.setup(id, egg_style_for(species) if species != null else EggClutch2D.STYLE_SCATTER)
+			add_child(node)
+			move_child(node, mini(3, get_child_count() - 1))
+			_egg_nodes[id] = node
+		node.position = Vector2(float(batch["x"]), float(batch["y"]))
+		node.update_from(batch)
+	for id in _egg_nodes.keys():
+		if not live.has(id):
+			if is_instance_valid(_egg_nodes[id]):
+				_egg_nodes[id].queue_free()
+			_egg_nodes.erase(id)
+
+
+## Eggs ripen, get eaten by tankmates, and rot in bad water; at the end the survivors hatch.
+func _advance_egg_batches(days: float) -> void:
+	if pending_egg_batches.is_empty():
+		return
+	var adults: Array = []
+	for fish in get_fish():
+		if not fish.is_fry:
+			adults.append(fish)
+	var finished: Array = []
+	for batch in pending_egg_batches:
+		var species := ShopManager.get_species(str(batch["species_id"]))
+		if species == null:
+			finished.append(batch)
+			continue
+		batch["remaining_days"] = float(batch["remaining_days"]) - days
+		var guarded := false
+		if bool(batch["guard"]):
+			for fish in adults:
+				if fish.species == species and fish.health >= 40.0:
+					guarded = true
+					break
+		batch["guarded_now"] = guarded
+		if not is_catching_up:
+			## Tankmates that eat meat or bits of everything take eggs; a guarding parent keeps most away.
+			var eaters := 0
+			for fish in adults:
+				if fish.species.diet_type != FishSpeciesData.Diet.HERBIVORE:
+					eaters += 1
+			var eat_share: float = clampf(0.06 * float(eaters) * (0.12 if guarded else 1.0) * days, 0.0, 0.5)
+			var eaten: float = float(batch["viable"]) * eat_share
+			batch["viable"] = float(batch["viable"]) - eaten
+			batch["eaten"] = float(batch["eaten"]) + eaten
+			## Fungus: dirty water or warmth/cold outside the species' range kills eggs, and every
+			## white egg left in the clutch spreads it to the neighbours.
+			var water_bad: bool = ammonia > 0.15 or nitrite > 0.15 or nitrate > 40.0 or not species.is_within_tolerance(temperature, ph, gh, specific_gravity)
+			var total: float = float(batch["viable"]) + float(batch["duds"])
+			var dud_share: float = float(batch["duds"]) / maxf(total, 0.001)
+			var rot_rate: float = 0.03 + (0.35 if water_bad else 0.0) + 0.25 * dud_share
+			if guarded:
+				rot_rate *= 0.4
+			var rotted: float = float(batch["viable"]) * clampf(rot_rate * days, 0.0, 1.0)
+			batch["viable"] = float(batch["viable"]) - rotted
+			batch["duds"] = float(batch["duds"]) + rotted
+			batch["rotted"] = float(batch["rotted"]) + rotted
+		if float(batch["viable"]) + float(batch["duds"]) < 0.5:
+			finished.append(batch)
+			eggs_lost.emit(species, "eaten" if float(batch["eaten"]) >= float(batch["rotted"]) else "fungus")
+			continue
+		if float(batch["remaining_days"]) <= 0.0:
+			finished.append(batch)
+			var survivors: int = int(round(float(batch["viable"])))
+			if survivors <= 0:
+				eggs_lost.emit(species, "fungus")
+				continue
+			survivors = mini(survivors, FishController.MAX_FRY_PER_BATCH_SPAWNED)
+			for i in range(survivors):
+				var fry := add_fish(species, true)
+				fry.position = Vector2(float(batch["x"]), float(batch["y"])) + Vector2(randf_range(-30.0, 30.0), randf_range(-20.0, 20.0))
+			spawn_birth_effect(Vector2(float(batch["x"]), float(batch["y"])))
+			eggs_hatched.emit(species, survivors)
+	for batch in finished:
+		pending_egg_batches.erase(batch)
+	_sync_egg_nodes()
 
 
 func get_neglect_score() -> float:
@@ -923,8 +1212,6 @@ func fry_count() -> int:
 	return count
 
 
-func schedule_egg_batch(species: FishSpeciesData, count: int, incubation_days: float) -> void:
-	pending_egg_batches.append({"species_id": species.id, "count": count, "remaining_days": incubation_days})
 
 
 func administer_medication(medication: MedicationData) -> void:
@@ -965,6 +1252,8 @@ func _apply_active_event_effects(hours: float) -> void:
 ## only one food type used to leave shrimp, corys and bettas permanently starving.
 func feed(food: FoodItemData) -> void:
 	for fish in get_fish():
+		if fish.is_mouthbrooding():
+			continue
 		fish.hunger = min(100.0, fish.hunger + food.hunger_restored)
 	ammonia += food.waste_factor * 0.05
 	days_since_feeding = 0.0
@@ -1025,7 +1314,7 @@ func to_save_dict() -> Dictionary:
 		"medication_remaining_days": medication_remaining_days,
 		"pending_egg_batches": pending_egg_batches, "algae": algae_level(), "mulm": mulm_level(), "purchase_price": purchase_price,
 		"tank_liters": tank_liters, "tank_type": tank_type, "locked": locked,
-		"ambient_temp_base_c": ambient_temp_base_c,
+		"ambient_temp_base_c": ambient_temp_base_c, "scape_seed": scape_seed,
 		"equipment": {
 			"heater": _equipment_id(heater), "filter": _equipment_id(filter),
 			"light": _equipment_id(light_equipment), "air_stone": _equipment_id(air_stone),
@@ -1039,6 +1328,8 @@ func from_save_dict(d: Dictionary) -> void:
 	tank_liters = d.get("tank_liters", tank_liters)
 	tank_type = int(d.get("tank_type", tank_type)) as TankType
 	ambient_temp_base_c = d.get("ambient_temp_base_c", ambient_temp_base_c)
+	## Saves from before every tank had its own scenery: spread the tanks over the pictures.
+	scape_seed = int(d.get("scape_seed", get_index()))
 	var was_locked: bool = locked
 	locked = d.get("locked", locked)
 	if was_locked and not locked:
@@ -1066,8 +1357,9 @@ func from_save_dict(d: Dictionary) -> void:
 	days_since_feeding = d.get("days_since_feeding", 0.0)
 	heater_failed = d.get("heater_failed", false)
 	medication_remaining_days = d.get("medication_remaining_days", 0.0)
-	pending_egg_batches = d.get("pending_egg_batches", [])
+	pending_egg_batches = _upgrade_egg_batches(d.get("pending_egg_batches", []))
 	_rebuild_view()
+	_sync_egg_nodes()
 	purchase_price = int(d.get("purchase_price", 0))
 	if _algae != null:
 		_algae.set_level(float(d.get("algae", 0.0)))

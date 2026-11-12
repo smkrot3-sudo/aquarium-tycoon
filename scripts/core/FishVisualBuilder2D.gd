@@ -16,7 +16,7 @@ const SHADER_MARGIN := 0.12
 ## On-screen length in pixels (at visual scale 1, full-grown) — a square-root curve of the real
 ## size, so a 30cm oscar is clearly a big fish next to a 4cm tetra without filling the screen.
 static func display_length(species: FishSpeciesData) -> float:
-	return 22.0 + 11.0 * sqrt(maxf(species.max_size_cm, 1.0))
+	return 18.0 + 9.5 * sqrt(maxf(species.max_size_cm, 1.0))
 
 
 static func female_sprite_path(species: FishSpeciesData) -> String:
