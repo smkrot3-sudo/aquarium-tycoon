@@ -1,7 +1,7 @@
 extends Resource
 class_name EquipmentData
 
-enum Slot { HEATER, FILTER, LIGHT, AIR_STONE, CO2, TEST_KIT, SUBSTRATE, DECOR }
+enum Slot { HEATER, FILTER, LIGHT, AIR_STONE, CO2, TEST_KIT, SUBSTRATE, DECOR, NET }
 
 @export var id: String = ""
 @export var display_name: String = ""

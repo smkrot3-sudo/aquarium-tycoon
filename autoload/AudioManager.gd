@@ -12,6 +12,8 @@ extends Node
 
 const SAMPLE_RATE := 22050
 const LOOP_RATE := 11025
+const AMBIENCE_PATH := "res://assets/audio/ambience_loop.wav"
+const MUSIC_PATH := "res://assets/audio/music_loop.wav"
 const PLAYER_POOL_SIZE := 6
 const SINE_TABLE_SIZE := 4096
 
@@ -177,14 +179,16 @@ static func _wrap_wav(data: PackedByteArray, rate: int, looping: bool) -> AudioS
 # Ambience and music (rendered in small slices, a few milliseconds per frame)
 # ----------------------------------------------------------------------------------------
 
+## Loads the two pre-rendered loops (assets/audio, baked by scripts/dev/AudioBake.gd). Nothing is
+## synthesised while the game runs.
 func _render_loops() -> void:
 	await get_tree().process_frame
-	var ambience: PackedByteArray = await _render_ambience()
-	if _cancel:
-		return
-	var music: PackedByteArray = await _render_music()
-	if _cancel:
-		return
+	var ambience: AudioStream = null
+	var music: AudioStream = null
+	if ResourceLoader.exists(AMBIENCE_PATH):
+		ambience = load(AMBIENCE_PATH)
+	if ResourceLoader.exists(MUSIC_PATH):
+		music = load(MUSIC_PATH)
 	_start_loops(ambience, music)
 
 
@@ -195,14 +199,14 @@ func _slice() -> void:
 		_slice_start_usec = Time.get_ticks_usec()
 
 
-func _start_loops(ambience: PackedByteArray, music: PackedByteArray) -> void:
+func _start_loops(ambience: AudioStream, music: AudioStream) -> void:
 	_loops_started = true
 	_loops_rendering = false
-	if ambience.size() > 0:
-		_ambience_player.stream = _wrap_wav(ambience, LOOP_RATE, true)
+	if ambience != null:
+		_ambience_player.stream = ambience
 		_ambience_player.play()
-	if music.size() > 0:
-		_music_player.stream = _wrap_wav(music, LOOP_RATE, true)
+	if music != null:
+		_music_player.stream = music
 		_music_player.play()
 
 

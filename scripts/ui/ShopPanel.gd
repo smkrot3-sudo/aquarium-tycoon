@@ -185,10 +185,12 @@ func _fill_tanks() -> void:
 	var list: Array = ShopManager.tank_preset_catalog.values()
 	list.sort_custom(func(a, b): return a.price < b.price)
 	for preset in list:
-		var is_marine: bool = preset.tank_type == TankController.TankType.SALTWATER
-		var facts := Localization.t("shop_tank_facts", [
-			Localization.t("tank_type_salt") if is_marine else Localization.t("tank_type_fresh"), int(preset.tank_liters),
-		])
+		var type_key := "tank_type_fresh"
+		if preset.tank_type == TankController.TankType.SALTWATER:
+			type_key = "tank_type_salt"
+		elif preset.tank_type == TankController.TankType.POND:
+			type_key = "tank_type_pond"
+		var facts := Localization.t("shop_tank_facts", [Localization.t(type_key), int(preset.tank_liters)])
 		var shell := _build_card_shell(
 			TankController.BACKGROUND[preset.tank_type], Vector2(140.0, 80.0),
 			Localization.t("tank_%s" % preset.id), facts,

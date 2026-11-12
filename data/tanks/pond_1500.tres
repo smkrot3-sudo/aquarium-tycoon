@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="TankPresetData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/resources/TankPresetData.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "pond_1500"
+display_name = "Large Garden Pond (1500L)"
+price = 700
+unlock_tier = 22
+tank_liters = 1500.0
+tank_type = 2
+ambient_temp_base_c = 22.0

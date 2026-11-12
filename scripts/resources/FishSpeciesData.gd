@@ -41,6 +41,9 @@ enum Temperament { PEACEFUL, SEMI_AGGRESSIVE, AGGRESSIVE }
 @export var bioload_factor: float = 1.0
 @export var temperament: Temperament = Temperament.PEACEFUL
 @export var compatibility_tags: Array[String] = []
+## Where it can live: 0 = aquarium only, 1 = outdoor pond only (cold-water koi and friends),
+## 2 = either. The shop and the move-fish panel check this against the tank type.
+@export var habitat: int = 0
 @export var schooling_min_group: int = 1
 ## 0 = very disease-prone (e.g. neon tetra disease susceptibility), 1 = very hardy.
 @export_range(0.0, 1.0) var disease_resistance: float = 0.5

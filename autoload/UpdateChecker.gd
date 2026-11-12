@@ -7,9 +7,9 @@ extends Node
 ## as export_presets.cfg's `version/code` on every release build. This is the one piece of
 ## version bookkeeping that lives in two places and has to be kept in sync by hand — there's no
 ## way for the running game to read its own installed versionCode back from the APK itself.
-const APP_VERSION_CODE := 12
+const APP_VERSION_CODE := 13
 ## Shown to the player (home screen, settings). Keep equal to export_presets.cfg `version/name`.
-const APP_VERSION_NAME := "1.7.3"
+const APP_VERSION_NAME := "1.8"
 
 const REPO := "smkrot3-sudo/aquarium-tycoon"
 const API_URL := "https://api.github.com/repos/%s/releases/latest" % REPO

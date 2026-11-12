@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="TankPresetData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/resources/TankPresetData.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "pond_4000"
+display_name = "Koi Pond (4000L)"
+price = 2000
+unlock_tier = 30
+tank_liters = 4000.0
+tank_type = 2
+ambient_temp_base_c = 22.0

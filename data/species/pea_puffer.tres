@@ -1,0 +1,41 @@
+[gd_resource type="Resource" script_class="FishSpeciesData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/resources/FishSpeciesData.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "pea_puffer"
+display_name = "Pea Puffer"
+scientific_name = "Carinotetraodon travancoricus"
+swim_style = "hoverer"
+archetype_id = "livebearer"
+palette_color = Color(0.8, 0.85, 0.3, 1)
+temp_min_c = 24.0
+temp_max_c = 28.0
+ph_min = 6.5
+ph_max = 7.8
+min_tank_liters = 40.0
+is_marine = false
+diet_type = 2
+bioload_factor = 0.5
+temperament = 1
+compatibility_tags = Array[String](["puffer"])
+schooling_min_group = 1
+disease_resistance = 0.55
+max_size_cm = 3.0
+growth_rate_cm_per_sim_day = 0.04
+maturity_age_sim_days = 150.0
+lifespan_sim_days = 1500.0
+is_livebearer = false
+pair_required = true
+breeding_cooldown_sim_days = 30.0
+fry_per_batch_min = 5
+fry_per_batch_max = 15
+egg_incubation_sim_days = 5.0
+habitat = 0
+base_price = 12
+sell_price_adult = 8
+sell_price_fry = 2
+rarity_tier = 3
+unlock_tier = 13
+source_note = "Gameplay values; see data/generate_species.py for how ranges were chosen."

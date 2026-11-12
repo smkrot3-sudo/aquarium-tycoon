@@ -464,7 +464,7 @@ func simulate_hours(hours: float, tank: TankController) -> void:
 		queue_free()
 		return
 
-	hunger = max(0.0, hunger - HUNGER_LOSS_PER_HOUR * hours)
+	hunger = max(0.0, hunger - HUNGER_LOSS_PER_HOUR * hours * tank.metabolism_factor())
 
 	var in_tolerance := species.is_within_tolerance(tank.temperature, tank.ph, tank.gh, tank.specific_gravity)
 	var schooling_ok := true
@@ -567,7 +567,7 @@ func _update_breeding(days: float, in_tolerance: bool, tank: TankController) -> 
 	breeding_cooldown_remaining = max(0.0, breeding_cooldown_remaining - days)
 	if breeding_cooldown_remaining > 0.0:
 		return
-	if health < 50.0 or not in_tolerance:
+	if health < 50.0 or not in_tolerance or not tank.breeding_weather_ok():
 		return
 	if tank.stocking_fraction() >= Economy.BREEDING_STOCKING_LIMIT:
 		return

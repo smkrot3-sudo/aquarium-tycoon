@@ -468,14 +468,18 @@ const EQUIPMENT := {
 ## Flattens the tables above into Localization-style entries: key -> {"en": ..., "he": ...}.
 static func build() -> Dictionary:
 	var out: Dictionary = {}
-	for species_id in SPECIES.keys():
-		var entry: Dictionary = SPECIES[species_id]
+	var all_species: Dictionary = SPECIES.duplicate()
+	all_species.merge(LoreStrings18.SPECIES)
+	for species_id in all_species.keys():
+		var entry: Dictionary = all_species[species_id]
 		out["sp_%s" % species_id] = _pair(entry["name"])
 		out["desc_sp_%s" % species_id] = _pair(entry["short"])
 		out["origin_sp_%s" % species_id] = _pair(entry["origin"])
 		out["lore_sp_%s" % species_id] = _pair(entry["lore"])
-	for equipment_id in EQUIPMENT.keys():
-		var entry: Dictionary = EQUIPMENT[equipment_id]
+	var all_equipment: Dictionary = EQUIPMENT.duplicate()
+	all_equipment.merge(LoreStrings18.EQUIPMENT)
+	for equipment_id in all_equipment.keys():
+		var entry: Dictionary = all_equipment[equipment_id]
 		out["eq_%s" % equipment_id] = _pair(entry["name"])
 		out["desc_eq_%s" % equipment_id] = _pair(entry["short"])
 		out["lore_eq_%s" % equipment_id] = _pair(entry["lore"])

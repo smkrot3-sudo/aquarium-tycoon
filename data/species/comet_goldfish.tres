@@ -1,0 +1,41 @@
+[gd_resource type="Resource" script_class="FishSpeciesData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/resources/FishSpeciesData.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "comet_goldfish"
+display_name = "Comet Goldfish"
+scientific_name = "Carassius auratus (comet)"
+swim_style = "cruiser"
+archetype_id = "livebearer"
+palette_color = Color(1.0, 0.45, 0.1, 1)
+temp_min_c = 2.0
+temp_max_c = 28.0
+ph_min = 6.5
+ph_max = 8.2
+min_tank_liters = 300.0
+is_marine = false
+diet_type = 1
+bioload_factor = 1.6
+temperament = 0
+compatibility_tags = Array[String](["pond", "coldwater"])
+schooling_min_group = 1
+disease_resistance = 0.8
+max_size_cm = 30.0
+growth_rate_cm_per_sim_day = 0.12
+maturity_age_sim_days = 200.0
+lifespan_sim_days = 7000.0
+is_livebearer = false
+pair_required = true
+breeding_cooldown_sim_days = 45.0
+fry_per_batch_min = 20
+fry_per_batch_max = 80
+egg_incubation_sim_days = 3.0
+habitat = 1
+base_price = 8
+sell_price_adult = 5
+sell_price_fry = 1
+rarity_tier = 3
+unlock_tier = 14
+source_note = "Gameplay values; see data/generate_species.py for how ranges were chosen."

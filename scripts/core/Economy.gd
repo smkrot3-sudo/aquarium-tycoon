@@ -46,14 +46,18 @@ static func fry_sale_value(species: FishSpeciesData, is_fry: bool) -> int:
 ## independent of money? Returns "" when compatible, or a short reason CODE otherwise —
 ## deliberately not a formatted message, so callers (GameController) can localize it. See
 ## compatibility_reason_english() below for a quick non-localized version (dev tools/logs only).
-static func compatibility_reason_code(species: FishSpeciesData, tank_liters: float, tank_is_saltwater: bool, has_heater: bool, current_bioload: float = 0.0) -> String:
+static func compatibility_reason_code(species: FishSpeciesData, tank_liters: float, tank_is_saltwater: bool, has_heater: bool, current_bioload: float = 0.0, tank_is_pond: bool = false) -> String:
 	if species.is_marine and not tank_is_saltwater:
 		return "marine_needs_saltwater"
 	if not species.is_marine and tank_is_saltwater:
 		return "freshwater_in_saltwater"
+	if tank_is_pond and species.habitat == 0:
+		return "not_for_pond"
+	if not tank_is_pond and species.habitat == 1:
+		return "pond_only"
 	if tank_liters < species.min_tank_liters:
 		return "tank_too_small"
-	if not has_heater and species.temp_min_c > 24.0:
+	if not tank_is_pond and not has_heater and species.temp_min_c > 24.0:
 		return "needs_heater"
 	if current_bioload + species.bioload_factor > max_safe_bioload(tank_liters):
 		return "tank_at_capacity"

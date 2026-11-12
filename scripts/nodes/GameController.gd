@@ -378,6 +378,10 @@ func move_block_reason(fish: FishController, dest: TankController) -> String:
 		return Localization.t("alert_marine_needs_saltwater", [Localization.t("sp_%s" % species.id)])
 	if not species.is_marine and salt:
 		return Localization.t("alert_freshwater_in_saltwater", [Localization.t("sp_%s" % species.id)])
+	if dest.is_pond() and species.habitat == 0:
+		return Localization.t("alert_not_for_pond", [Localization.t("sp_%s" % species.id)])
+	if not dest.is_pond() and species.habitat == 1:
+		return Localization.t("alert_pond_only", [Localization.t("sp_%s" % species.id)])
 	if not fish.is_fry and dest.tank_liters < species.min_tank_liters:
 		return Localization.t("alert_tank_too_small", [int(species.min_tank_liters), int(dest.tank_liters)])
 	var load: float = species.bioload_factor * (fish.size_cm / maxf(species.max_size_cm, 0.01))
@@ -511,7 +515,11 @@ func find_tank_of_type(saltwater: bool) -> int:
 
 func tank_display_name(index: int) -> String:
 	var tank := _tanks[index]
-	var type_key := "tank_type_salt" if tank.tank_type == TankController.TankType.SALTWATER else "tank_type_fresh"
+	var type_key := "tank_type_fresh"
+	if tank.tank_type == TankController.TankType.SALTWATER:
+		type_key = "tank_type_salt"
+	elif tank.is_pond():
+		type_key = "tank_type_pond"
 	return Localization.t("tank_name", [index + 1, Localization.t(type_key), int(tank.tank_liters)])
 
 
@@ -570,6 +578,8 @@ func is_equipment_installed(equipment: EquipmentData) -> bool:
 			return tank.air_stone == equipment
 		EquipmentData.Slot.TEST_KIT:
 			return tank.has_test_kit
+		EquipmentData.Slot.NET:
+			return tank.has_net
 	return false
 
 
@@ -579,6 +589,11 @@ func equipment_block_reason(equipment: EquipmentData) -> String:
 		return _tier_lock_text(equipment.unlock_tier)
 	if is_equipment_installed(equipment):
 		return Localization.t("shop_installed")
+	var tank := current_tank()
+	if equipment.slot == EquipmentData.Slot.HEATER and tank.is_pond():
+		return Localization.t("alert_pond_no_heater")
+	if equipment.slot == EquipmentData.Slot.NET and not tank.is_pond():
+		return Localization.t("alert_net_pond_only")
 	return ""
 
 
@@ -611,6 +626,8 @@ func buy_equipment(equipment_id: String) -> bool:
 			tank.air_stone = equipment
 		EquipmentData.Slot.TEST_KIT:
 			tank.has_test_kit = equipment.reveals_exact_readings
+		EquipmentData.Slot.NET:
+			tank.has_net = true
 	tank.refresh_equipment_visuals()
 	AudioManager.play("coin")
 	toast(Localization.t("toast_installed", [Localization.t("eq_%s" % equipment_id)]), "good")
@@ -635,13 +652,17 @@ func fish_block_reason(species: FishSpeciesData) -> String:
 ## Translates Economy.compatibility_reason_code()'s result — single source of truth for the
 ## actual compatibility RULES lives in Economy; this only maps a code to localized text.
 func _localized_compatibility_reason(species: FishSpeciesData, tank: TankController, is_saltwater: bool) -> String:
-	var code := Economy.compatibility_reason_code(species, tank.tank_liters, is_saltwater, tank.heater != null, tank.total_bioload())
+	var code := Economy.compatibility_reason_code(species, tank.tank_liters, is_saltwater, tank.heater != null, tank.total_bioload(), tank.is_pond())
 	var species_name := Localization.t("sp_%s" % species.id)
 	match code:
 		"marine_needs_saltwater":
 			return Localization.t("alert_marine_needs_saltwater", [species_name])
 		"freshwater_in_saltwater":
 			return Localization.t("alert_freshwater_in_saltwater", [species_name])
+		"not_for_pond":
+			return Localization.t("alert_not_for_pond", [species_name])
+		"pond_only":
+			return Localization.t("alert_pond_only", [species_name])
 		"tank_too_small":
 			return Localization.t("alert_tank_too_small", [int(species.min_tank_liters), int(tank.tank_liters)])
 		"needs_heater":
@@ -746,6 +767,9 @@ func feed(force: bool = false) -> bool:
 	var fish_list := tank.get_fish()
 	if fish_list.is_empty():
 		toast(Localization.t("alert_no_fish_to_feed"), "bad")
+		return false
+	if tank.is_frozen():
+		toast(Localization.t("alert_pond_frozen"), "info")
 		return false
 	if not force:
 		var hungriest := 100.0
@@ -857,11 +881,15 @@ func current_tip() -> Dictionary:
 		return {"text": Localization.t("tip_buy_fish"), "action": to_shop_fish, "kind": "warn"}
 	if tank.ammonia > WaterChemistry.AMMONIA_DANGER or tank.nitrite > WaterChemistry.NITRITE_DANGER or tank.nitrate > WaterChemistry.NITRATE_DANGER:
 		return {"text": Localization.t("tip_water_change"), "action": water_change, "kind": "bad"}
+	if tank.is_frozen():
+		return {"text": Localization.t("tip_pond_frozen"), "action": Callable(), "kind": "info"}
 	if tank.hungry_fish_count() > 0:
 		return {"text": Localization.t("tip_feed"), "action": feed.bind(false), "kind": "warn"}
 	if tank.sick_fish_count() > 0 and tank.medication_remaining_days <= 0.0:
 		return {"text": Localization.t("tip_treat", [medication_price()]), "action": treat_disease, "kind": "bad"}
-	if tank.heater == null or tank.heater_failed:
+	if tank.is_pond() and not tank.has_net:
+		return {"text": Localization.t("tip_pond_net"), "action": to_shop_equipment, "kind": "warn"}
+	if not tank.is_pond() and (tank.heater == null or tank.heater_failed):
 		for fish in fish_list:
 			if tank.temperature < fish.species.temp_min_c:
 				var key := "tip_heater_failed" if tank.heater_failed else "tip_buy_heater"
@@ -928,6 +956,9 @@ func set_tool(new_tool: int) -> void:
 func pinch_feed(tank: TankController, point: Vector2) -> void:
 	if tank.get_fish().is_empty():
 		toast(Localization.t("alert_no_fish_to_feed"), "bad")
+		return
+	if tank.is_frozen():
+		toast(Localization.t("alert_pond_frozen"), "info")
 		return
 	_pinch_count += 1
 	if _pinch_count % 4 == 1:
@@ -1017,7 +1048,7 @@ func advice() -> Dictionary:
 	var fish_list: Array = []
 	var cold := false
 	for fish in tank.get_fish():
-		if tank.temperature < fish.species.temp_min_c:
+		if tank.temperature < fish.species.temp_min_c and not tank.is_pond():
 			cold = true
 	if tank.filter == null:
 		lines.append(Localization.t("advice_no_filter"))
@@ -1092,6 +1123,8 @@ func _on_fish_born(species: FishSpeciesData, count: int) -> void:
 
 func _on_fish_died(species: FishSpeciesData, fish_name: String, reason: String) -> void:
 	var key := "toast_died_old_age" if reason == "old_age" else "toast_died"
+	if reason == "heron":
+		key = "toast_heron"
 	toast(Localization.t(key, [fish_name, Localization.t("sp_%s" % species.id)]), "info" if reason == "old_age" else "bad")
 	state_changed.emit()
 	_check_bailout.call_deferred()

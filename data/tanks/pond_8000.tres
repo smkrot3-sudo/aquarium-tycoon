@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="TankPresetData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/resources/TankPresetData.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "pond_8000"
+display_name = "Estate Pond (8000L)"
+price = 5200
+unlock_tier = 40
+tank_liters = 8000.0
+tank_type = 2
+ambient_temp_base_c = 22.0

@@ -61,6 +61,7 @@ func save_game() -> void:
 		"progress": Progress.to_save_dict(),
 		"market": Market.to_save_dict(),
 		"history": History.to_save_dict(),
+		"weather": Weather.to_save_dict(),
 		"time": {
 			"sim_minutes_total": TimeManager.sim_minutes_total,
 			"current_season": TimeManager.current_season,
@@ -129,6 +130,7 @@ func load_game() -> bool:
 	Progress.from_save_dict(data.get("progress", {}))
 	Market.from_save_dict(data.get("market", {}))
 	History.from_save_dict(data.get("history", {}))
+	Weather.from_save_dict(data.get("weather", {}))
 	TimeManager.reset_speed()
 	var time_data: Dictionary = data.get("time", {})
 	TimeManager.sim_minutes_total = time_data.get("sim_minutes_total", 0.0)

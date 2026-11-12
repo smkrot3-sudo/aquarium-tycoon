@@ -40,6 +40,7 @@ UpdateChecker="*res://autoload/UpdateChecker.gd"
 Progress="*res://autoload/Progress.gd"
 Market="*res://autoload/Market.gd"
 History="*res://autoload/History.gd"
+Weather="*res://autoload/Weather.gd"
 
 [rendering]
 

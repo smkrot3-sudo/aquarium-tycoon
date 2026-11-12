@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="TankPresetData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/resources/TankPresetData.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "pond_500"
+display_name = "Garden Pond (500L)"
+price = 220
+unlock_tier = 14
+tank_liters = 500.0
+tank_type = 2
+ambient_temp_base_c = 22.0

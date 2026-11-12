@@ -1,0 +1,41 @@
+[gd_resource type="Resource" script_class="FishSpeciesData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/resources/FishSpeciesData.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "dogface_puffer"
+display_name = "Dogface Puffer"
+scientific_name = "Arothron nigropunctatus"
+swim_style = "cruiser"
+archetype_id = "tall"
+palette_color = Color(0.55, 0.55, 0.45, 1)
+temp_min_c = 24.0
+temp_max_c = 28.0
+ph_min = 7.9
+ph_max = 8.4
+min_tank_liters = 400.0
+is_marine = true
+diet_type = 2
+bioload_factor = 3.5
+temperament = 1
+compatibility_tags = Array[String](["puffer", "predator"])
+schooling_min_group = 1
+disease_resistance = 0.5
+max_size_cm = 33.0
+growth_rate_cm_per_sim_day = 0.12
+maturity_age_sim_days = 300.0
+lifespan_sim_days = 5000.0
+is_livebearer = false
+pair_required = false
+breeding_cooldown_sim_days = 0.0
+fry_per_batch_min = 0
+fry_per_batch_max = 0
+egg_incubation_sim_days = 0.0
+habitat = 0
+base_price = 120
+sell_price_adult = 78
+sell_price_fry = 0
+rarity_tier = 3
+unlock_tier = 44
+source_note = "Gameplay values; see data/generate_species.py for how ranges were chosen."

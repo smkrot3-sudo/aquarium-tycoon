@@ -150,6 +150,11 @@ func _fill_readings(tank: TankController) -> void:
 			color = UiKit.COL_WARN
 		_add_reading(Localization.t("tank_water_quality"), Localization.t(key), color, Localization.t("tank_hint_no_kit"))
 
+	if tank.is_pond():
+		_add_reading(Localization.t("pond_weather"), "%s · %d°" % [Localization.t(Weather.name_key()), int(round(Weather.outdoor_c()))], UiKit.COL_TEXT, "")
+		if tank.is_frozen():
+			_add_reading(Localization.t("pond_ice"), Localization.t("pond_iced_over"), UiKit.COL_WARN, Localization.t("alert_pond_frozen"))
+		_add_reading(Localization.t("pond_net"), Localization.t("pond_net_on") if tank.has_net else Localization.t("pond_net_off"), UiKit.COL_GOOD if tank.has_net else UiKit.COL_WARN, "" if tank.has_net else Localization.t("tip_pond_net"))
 	if tank.tank_type == TankController.TankType.SALTWATER:
 		_add_reading(Localization.t("tank_salinity"), "%.3f" % tank.specific_gravity, UiKit.COL_TEXT, "")
 

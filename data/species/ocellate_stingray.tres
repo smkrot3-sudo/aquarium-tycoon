@@ -1,0 +1,41 @@
+[gd_resource type="Resource" script_class="FishSpeciesData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/resources/FishSpeciesData.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "ocellate_stingray"
+display_name = "Ocellate River Stingray"
+scientific_name = "Potamotrygon motoro"
+swim_style = "bottom"
+archetype_id = "bottom_dweller"
+palette_color = Color(0.65, 0.5, 0.3, 1)
+temp_min_c = 24.0
+temp_max_c = 29.0
+ph_min = 6.0
+ph_max = 7.5
+min_tank_liters = 800.0
+is_marine = false
+diet_type = 2
+bioload_factor = 5.0
+temperament = 0
+compatibility_tags = Array[String](["ray", "bottom"])
+schooling_min_group = 1
+disease_resistance = 0.5
+max_size_cm = 45.0
+growth_rate_cm_per_sim_day = 0.12
+maturity_age_sim_days = 500.0
+lifespan_sim_days = 7000.0
+is_livebearer = true
+pair_required = true
+breeding_cooldown_sim_days = 90.0
+fry_per_batch_min = 2
+fry_per_batch_max = 6
+egg_incubation_sim_days = 0.0
+habitat = 0
+base_price = 240
+sell_price_adult = 160
+sell_price_fry = 25
+rarity_tier = 3
+unlock_tier = 43
+source_note = "Gameplay values; see data/generate_species.py for how ranges were chosen."

@@ -1,21 +1,25 @@
 extends Node
-## Dev-only: times the ambience/music renderers and checks they produce sensible, non-silent,
-## non-clipping audio. Run the scene scenes/dev/AudioRenderTest.tscn.
+## Dev-only: the shipped music and ambience loops (assets/audio) load, loop and start playing once
+## the player turns the music up, and the game itself synthesises nothing at runtime.
+## Run the scene scenes/dev/AudioRenderTest.tscn.
 
 func _ready() -> void:
-	var audio := AudioManager
-	for which in ["_render_ambience", "_render_music"]:
-		var t0 := Time.get_ticks_msec()
-		var data: PackedByteArray = await audio.call(which)
-		var ms := Time.get_ticks_msec() - t0
-		var peak := 0
-		var energy := 0.0
-		var count := data.size() / 2
-		for i in range(count):
-			var v := absi(data.decode_s16(i * 2))
-			peak = maxi(peak, v)
-			energy += float(v) * float(v)
-		var rms := sqrt(energy / maxf(1.0, float(count)))
-		print("%s: %d samples (%.1f s) in %d ms | peak %d | rms %.0f | %s" % [which, count, float(count) / audio.LOOP_RATE, ms, peak, rms, "OK" if peak > 4000 and peak < 32000 and rms > 800.0 else "SUSPICIOUS"])
+	var failures := 0
 	print("music on by default: ", AudioManager.music_volume > 0.0)
+	if AudioManager.music_volume > 0.0:
+		failures += 1
+	for path in [AudioManager.AMBIENCE_PATH, AudioManager.MUSIC_PATH]:
+		var stream: AudioStream = load(path)
+		var ok: bool = stream != null and stream is AudioStreamWAV and stream.loop_mode == AudioStreamWAV.LOOP_FORWARD and stream.get_length() > 5.0
+		print("%s: %s" % [path, "OK" if ok else "BAD"])
+		if not ok:
+			failures += 1
+	AudioManager.music_volume = 0.5
+	for i in range(30):
+		await get_tree().process_frame
+	var playing: bool = AudioManager._music_player.playing and AudioManager._ambience_player.playing
+	print("loops playing after turning the music up: ", playing)
+	if not playing:
+		failures += 1
+	print("=== Audio trace finished: %s ===" % ("ALL PASSED" if failures == 0 else "%d FAILED" % failures))
 	get_tree().quit()

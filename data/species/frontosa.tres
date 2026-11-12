@@ -1,0 +1,41 @@
+[gd_resource type="Resource" script_class="FishSpeciesData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/resources/FishSpeciesData.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "frontosa"
+display_name = "Frontosa Cichlid"
+scientific_name = "Cyphotilapia frontosa"
+swim_style = "hoverer"
+archetype_id = "tall"
+palette_color = Color(0.85, 0.85, 0.95, 1)
+temp_min_c = 23.0
+temp_max_c = 28.0
+ph_min = 7.0
+ph_max = 8.8
+min_tank_liters = 450.0
+is_marine = false
+diet_type = 2
+bioload_factor = 4.5
+temperament = 1
+compatibility_tags = Array[String](["cichlid", "mouthbrooder"])
+schooling_min_group = 1
+disease_resistance = 0.6
+max_size_cm = 35.0
+growth_rate_cm_per_sim_day = 0.09
+maturity_age_sim_days = 450.0
+lifespan_sim_days = 7000.0
+is_livebearer = true
+pair_required = true
+breeding_cooldown_sim_days = 60.0
+fry_per_batch_min = 10
+fry_per_batch_max = 40
+egg_incubation_sim_days = 0.0
+habitat = 0
+base_price = 90
+sell_price_adult = 60
+sell_price_fry = 6
+rarity_tier = 3
+unlock_tier = 34
+source_note = "Gameplay values; see data/generate_species.py for how ranges were chosen."

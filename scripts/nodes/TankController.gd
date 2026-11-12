@@ -14,18 +14,27 @@ class_name TankController
 const FISH_SCENE := preload("res://scenes/fish/Fish.tscn")
 const WATER_SHADER := preload("res://shaders/water_shimmer.gdshader")
 
-enum TankType { FRESHWATER, SALTWATER }
+enum TankType { FRESHWATER, SALTWATER, POND }
 ## What a finger does on the water: the hand opens fish cards and startles, the others act.
 enum Tool { HAND, FOOD, SCRAPER, VACUUM }
 
 ## Marine tanks drift toward a higher baseline pH (real reef water runs ~8.1-8.4, alkaline-
 ## buffered) and a salty specific-gravity target instead of freshwater's near-neutral pH.
-const PH_BASELINE := { TankType.FRESHWATER: 7.0, TankType.SALTWATER: 8.2 }
-const SG_TARGET := { TankType.FRESHWATER: 1.000, TankType.SALTWATER: 1.025 }
+const PH_BASELINE := { TankType.FRESHWATER: 7.0, TankType.SALTWATER: 8.2, TankType.POND: 7.5 }
+const SG_TARGET := { TankType.FRESHWATER: 1.000, TankType.SALTWATER: 1.025, TankType.POND: 1.000 }
 const BACKGROUND := {
 	TankType.FRESHWATER: "res://assets/backgrounds/freshwater.jpg",
 	TankType.SALTWATER: "res://assets/backgrounds/marine.jpg",
+	TankType.POND: "res://assets/backgrounds/freshwater.jpg",
 }
+## A pond below this temperature is iced over; fish stop eating well well before that.
+const ICE_BELOW_C := 4.0
+const HERON_CHANCE_PER_DAY := 0.08
+## A garden pond is wide and shallow compared with a glass tank: length : depth : width.
+const POND_RATIO := Vector3(3.0, 0.9, 2.0)
+## Sky, net and grass shown above the water when the camera looks at a pond.
+const POND_SKY_PX := 300.0
+const POND_SOIL_PX := 110.0
 
 ## Screen space the HUD keeps for itself (see scripts/ui/Hud.gd): a floating top bar and a
 ## docked, opaque bottom action bar. The room camera frames tanks between the two.
@@ -53,6 +62,9 @@ const MAX_CHEMISTRY_SUBSTEPS := 240
 @export var light_equipment: EquipmentData
 @export var air_stone: EquipmentData
 @export var has_test_kit: bool = false
+## Pond only: a net over the water that keeps the heron (and falling leaves) out.
+var has_net: bool = false
+var _ice_drawn: bool = false
 ## What the player paid for this tank (selling it returns a part of that).
 var purchase_price: int = 0
 
@@ -144,19 +156,48 @@ func _ready() -> void:
 # ----------------------------------------------------------------------------------------
 
 ## Length, height and depth in cm of a typical rectangular tank holding `liters`.
-static func dimensions_cm(liters: float) -> Vector3:
+static func dimensions_cm(liters: float, type: int = TankType.FRESHWATER) -> Vector3:
+	if type == TankType.POND:
+		var kp := pow(maxf(liters, 1.0) * 1000.0 / (POND_RATIO.x * POND_RATIO.y * POND_RATIO.z), 1.0 / 3.0)
+		return Vector3(POND_RATIO.x * kp, POND_RATIO.y * kp, POND_RATIO.z * kp)
 	var k := pow(maxf(liters, 1.0) * 1000.0 / 2.88, 1.0 / 3.0)
 	return Vector3(2.4 * k, 1.2 * k, k)
 
 
-static func interior_size_for(liters: float) -> Vector2:
-	var d := dimensions_cm(liters)
+static func interior_size_for(liters: float, type: int = TankType.FRESHWATER) -> Vector2:
+	var d := dimensions_cm(liters, type)
 	return Vector2(d.x, d.y) * PX_PER_CM
 
 
-## Height of the cabinet or table the tank stands on, in px.
-static func stand_height_px(liters: float) -> float:
+## Height of the cabinet or table the tank stands on, in px (a pond is dug into the ground).
+static func stand_height_px(liters: float, type: int = TankType.FRESHWATER) -> float:
+	if type == TankType.POND:
+		return 0.0
 	return lerpf(55.0, 85.0, clampf(liters / 1000.0, 0.0, 1.0)) * PX_PER_CM
+
+
+func is_pond() -> bool:
+	return tank_type == TankType.POND
+
+
+## True when the pond has iced over: no feeding, little movement, and the heron stays away.
+func is_frozen() -> bool:
+	return tank_type == TankType.POND and temperature < ICE_BELOW_C
+
+
+## Fish eat and breed far less in cold pond water.
+func metabolism_factor() -> float:
+	if tank_type != TankType.POND:
+		return 1.0
+	if temperature < 6.0:
+		return 0.15
+	if temperature < 12.0:
+		return 0.45
+	return 1.0
+
+
+func breeding_weather_ok() -> bool:
+	return tank_type != TankType.POND or temperature >= 14.0
 
 
 ## Thickness of the glass rim around the water, and of the stand's top plate, in px.
@@ -168,11 +209,22 @@ const STAND_OVERHANG_PX := 40.0
 
 ## Local y of the floor the stand rests on (the room puts this at its own floor line).
 func floor_local_y() -> float:
+	if is_pond():
+		return 0.0  ## the water's top edge is at ground level
 	return _view_rect.end.y + RIM_PX + PLATE_PX + stand_height_px(tank_liters)
+
+
+## Height of the part of the tank the camera frames in FOCUS mode (from the top of exterior_rect).
+func framed_height() -> float:
+	if is_pond():
+		return POND_SKY_PX + _view_rect.size.y + RIM_PX + POND_SOIL_PX * 0.5
+	return 52.0 + _view_rect.size.y + RIM_PX + PLATE_PX + stand_height_px(tank_liters) * 0.34
 
 
 ## Everything the tank occupies in the room (frame and stand included), in local pixels.
 func exterior_rect() -> Rect2:
+	if is_pond():
+		return Rect2(-STAND_OVERHANG_PX - RIM_PX, -POND_SKY_PX, _view_rect.size.x + 2.0 * (STAND_OVERHANG_PX + RIM_PX), POND_SKY_PX + _view_rect.size.y + RIM_PX + POND_SOIL_PX)
 	var top := -RIM_PX - 52.0
 	return Rect2(-STAND_OVERHANG_PX - RIM_PX, top, _view_rect.size.x + 2.0 * (STAND_OVERHANG_PX + RIM_PX), floor_local_y() - top)
 
@@ -184,7 +236,7 @@ func water_top_y() -> float:
 ## Rebuilds everything that depends on the tank's size. Fish aren't repositioned — they simply
 ## pick their next swim target inside the new bounds.
 func _rebuild_view() -> void:
-	_view_rect = Rect2(Vector2.ZERO, interior_size_for(tank_liters))
+	_view_rect = Rect2(Vector2.ZERO, interior_size_for(tank_liters, tank_type))
 	_rebuild_background()
 	_rebuild_shimmer()
 	refresh_equipment_visuals()
@@ -395,6 +447,8 @@ func _end_tool_drag() -> void:
 ## One pinch of flakes dropped at `point`: the fish within reach of it eat some, the rest of
 ## the shoal drifts over to look. Returns how many fish ate.
 func pinch(food: FoodItemData, point: Vector2) -> int:
+	if is_frozen():
+		return 0
 	_spawn_food_burst(point, 9, false)
 	var fed := 0
 	for fish in get_fish():
@@ -461,6 +515,8 @@ func _rebuild_background() -> void:
 	var s: float = _view_rect.size.x / crop.x
 	sprite.scale = Vector2.ONE * s
 	sprite.position = Vector2.ZERO
+	if tank_type == TankType.POND:
+		sprite.modulate = Color(0.66, 0.84, 0.62)  ## murkier, greener garden water
 	add_child(sprite)
 	move_child(sprite, 0)
 	_background = sprite
@@ -567,6 +623,9 @@ func unlock(liters: float, type: int, ambient_base_c: float) -> void:
 	ambient_temp_base_c = ambient_base_c
 	ph = PH_BASELINE[tank_type]
 	specific_gravity = SG_TARGET[tank_type]
+	has_net = false
+	if tank_type == TankType.POND:
+		temperature = Weather.pond_ambient_c()
 	locked = false
 	visible = true
 	TankRegistry.register_tank(self)
@@ -582,10 +641,11 @@ func reset_to_new(as_locked: bool, liters: float, type: TankType, ambient_base_c
 	light_equipment = null
 	air_stone = null
 	has_test_kit = false
+	has_net = false
 	tank_liters = liters
 	tank_type = type
 	ambient_temp_base_c = ambient_base_c
-	temperature = 24.0
+	temperature = Weather.pond_ambient_c() if type == TankType.POND else 24.0
 	ph = PH_BASELINE[tank_type]
 	gh = 10.0
 	specific_gravity = SG_TARGET[tank_type]
@@ -641,6 +701,8 @@ func stocking_fraction() -> float:
 
 
 func ambient_temp() -> float:
+	if tank_type == TankType.POND:
+		return Weather.pond_ambient_c()
 	var season_shift := {
 		TimeManager.Season.SPRING: 0.0,
 		TimeManager.Season.SUMMER: 3.0,
@@ -665,6 +727,11 @@ func simulate_hours(hours: float) -> void:
 
 	if _equipment_layer != null and heater != null:
 		_equipment_layer.queue_redraw()
+	var frozen_now: bool = is_frozen()
+	if frozen_now != _ice_drawn:
+		_ice_drawn = frozen_now
+		if _frame != null:
+			_frame.queue_redraw()
 	if ammonia > WaterChemistry.AMMONIA_DANGER:
 		water_quality_alert.emit("alert_ammonia_danger")
 	if algae_level() >= 90.0 and not is_catching_up:
@@ -674,7 +741,8 @@ func simulate_hours(hours: float) -> void:
 
 
 func _step_chemistry(hours: float) -> void:
-	var bioload: float = total_bioload()
+	## Fish in cold pond water eat and excrete very little.
+	var bioload: float = total_bioload() * metabolism_factor()
 	var heater_active: bool = heater != null and not heater_failed
 	var heater_target: float = heater.heater_target_temp_c if heater != null else 24.0
 	var heater_power: float = heater.heater_power if heater != null else 0.0
@@ -697,8 +765,12 @@ func _step_chemistry(hours: float) -> void:
 	## Soft/neglected freshwater tanks drift toward a lower effective pH ("old tank syndrome");
 	## marine mixes are carbonate-buffered and don't realistically crash the same way.
 	var ph_baseline: float = PH_BASELINE[tank_type]
-	if tank_type == TankType.FRESHWATER:
+	if tank_type != TankType.SALTWATER:
 		ph_baseline = WaterChemistry.freshwater_ph_baseline(ph_baseline, gh, ammonia, nitrite)
+	if tank_type == TankType.POND and Weather.is_wet():
+		## Rainwater tops the pond up and dilutes it.
+		nitrate = maxf(0.0, nitrate - 0.35 * hours)
+		ammonia *= pow(0.985, hours)
 	ph = WaterChemistry.step_drift_toward(ph, ph_baseline, 0.01, hours)
 	gh = WaterChemistry.step_drift_toward(gh, 10.0, 0.01, hours)
 	specific_gravity = WaterChemistry.step_specific_gravity(specific_gravity, SG_TARGET[tank_type], days_since_water_change, hours)
@@ -737,6 +809,26 @@ func on_day_elapsed() -> void:
 
 	_advance_egg_batches(1.0)
 	_fry_predation()
+	_heron_visit()
+
+
+## A heron stalks the pond edge now and then and takes a small or medium fish, unless the pond
+## is netted or frozen over.
+func _heron_visit() -> void:
+	if tank_type != TankType.POND or has_net or is_frozen() or is_catching_up:
+		return
+	if randf() >= HERON_CHANCE_PER_DAY:
+		return
+	var victims: Array = []
+	for fish in get_fish():
+		if fish.size_cm <= 40.0:
+			victims.append(fish)
+	if victims.is_empty():
+		return
+	var victim: FishController = victims.pick_random()
+	victim.death_reason = "heron"
+	victim.died.emit(victim)
+	victim.queue_free()
 
 
 ## Adult omnivores and carnivores eat the fry they share a tank with — the reason to move fry to
@@ -937,7 +1029,7 @@ func to_save_dict() -> Dictionary:
 		"equipment": {
 			"heater": _equipment_id(heater), "filter": _equipment_id(filter),
 			"light": _equipment_id(light_equipment), "air_stone": _equipment_id(air_stone),
-			"test_kit": has_test_kit,
+			"test_kit": has_test_kit, "net": has_net,
 		},
 		"fish": fish_saves,
 	}
@@ -960,6 +1052,7 @@ func from_save_dict(d: Dictionary) -> void:
 		light_equipment = ShopManager.get_equipment(eq.get("light", ""))
 		air_stone = ShopManager.get_equipment(eq.get("air_stone", ""))
 		has_test_kit = eq.get("test_kit", false)
+		has_net = eq.get("net", false)
 	temperature = d.get("temperature", temperature)
 	ph = d.get("ph", ph)
 	gh = d.get("gh", gh)
